@@ -422,6 +422,8 @@ static bool parse_record_name(const char* file, uint8_t* button, uint8_t* copy) 
 }
 
 static void load_entry(Storage* storage, RemoteStore* store, const char* name, uint8_t button) {
+    size_t name_length = strlen(name);
+    if(name_length > REMOTE_NAME_MAX) return; /* remote_name_valid already rejects this */
     if(remote_store_find_named(store, name, button) >= 0) return; /* other copy already seen */
     if(store->count >= REMOTE_STORE_MAX) {
         store->truncated = true;
@@ -436,7 +438,7 @@ static void load_entry(Storage* storage, RemoteStore* store, const char* name, u
     if(sa == 0 && sb == 0) return;
     RemoteEntry* entry = &store->entries[store->count++];
     memset(entry, 0, sizeof(*entry));
-    snprintf(entry->name, sizeof(entry->name), "%s", name);
+    memcpy(entry->name, name, name_length + 1);
     entry->button = button;
     /* Never fall back silently from a damaged copy; keep a readable profile only
      * so the entry can still be matched and labelled. */
