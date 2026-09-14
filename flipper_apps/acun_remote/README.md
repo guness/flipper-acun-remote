@@ -87,7 +87,8 @@ python3 tests/acun_remote/run.py
 ```
 
 The build extracts the SDK into a temporary directory and does not change the
-firmware checkout. A normal `ufbt` build from this application directory also
+firmware checkout. Add `--launch` to also copy the FAP to a USB-connected Flipper
+and start it; close qFlipper first so the serial port is free. A normal `ufbt` build from this application directory also
 works when ufbt is configured with a compatible SDK. The FAP manifest supports
 building as an external application in a firmware checkout.
 

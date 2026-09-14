@@ -5,6 +5,9 @@ Example:
 python3 scripts/build_acun_remote.py \
   --sdk ../unleashed-firmware/dist/f7-C/flipper-z-f7-sdk-local.zip \
   --toolchain ../unleashed-firmware/toolchain/current
+
+Add --launch to also copy the FAP to a USB-connected Flipper and start it
+(the SDK's `ufbt launch`; needs the serial port free, so close qFlipper first).
 """
 import argparse
 import hashlib
@@ -20,6 +23,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--sdk', required=True, type=Path)
     parser.add_argument('--toolchain', required=True, type=Path)
+    parser.add_argument('--launch', action='store_true',
+                        help='after building, install on the connected Flipper and run it')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     app = root / 'flipper_apps/acun_remote'
@@ -41,8 +46,9 @@ def main():
         env.update(UFBT_STATE_DIR=str(state), UFBT_SCRIPT_DIR=str(scripts),
                    FBT_TOOLCHAIN_PATH=str(toolchain.parent.parent))
         env['PATH'] = str(toolchain / 'bin') + os.pathsep + env.get('PATH', '')
+        targets = ['launch'] if args.launch else []
         subprocess.run([str(toolchain / 'bin/python3'), '-m', 'SCons', '-Q',
-                        '-C', str(scripts), f'UFBT_APP_DIR={app}'], env=env, check=True)
+                        '-C', str(scripts), f'UFBT_APP_DIR={app}', *targets], env=env, check=True)
         binary = app / 'dist/acun_remote.fap'
         metadata = {'sdk': sdk.name, 'sdk_sha256': hashlib.sha256(sdk.read_bytes()).hexdigest(),
                     'components': json.loads((current/'components.json').read_text()),
