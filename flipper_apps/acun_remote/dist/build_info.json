@@ -1,0 +1,22 @@
+{
+  "sdk": "flipper-z-f7-sdk-local.zip",
+  "sdk_sha256": "34ce0f0c2ea39fca415a1214581c086c0048736914b722716dea2f782305a932",
+  "components": {
+    "meta": {
+      "hw_target": "f7",
+      "flavor": "C",
+      "version": "local"
+    },
+    "components": {
+      "full.bin": "full.bin",
+      "firmware.elf": "firmware.elf",
+      "update.dir": "f7-update-local",
+      "sdk_headers.dir": "sdk_headers",
+      "lib.dir": "lib",
+      "scripts.dir": "scripts"
+    }
+  },
+  "fap_sha256": "997efb507ce89e4bf9a2dc351302c976d7eac054f33204665157853d3d3d1850",
+  "fap_bytes": 12724,
+  "hardware_tested": false
+}
