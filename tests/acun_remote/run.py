@@ -43,6 +43,7 @@ TMP = tempfile.TemporaryDirectory(prefix='sequence-core-')
 LIBRARY = Path(TMP.name) / 'core.so'
 subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-shared', '-fPIC',
                 '-O2', str(ROOT / 'flipper_apps/acun_remote/sequence_core.c'),
+                str(ROOT / 'flipper_apps/acun_remote/remote_name.c'),
                 '-o', str(LIBRARY)], check=True)
 lib = c.CDLL(str(LIBRARY))
 lib.seq_fit.argtypes = [c.POINTER(Frame), c.POINTER(Profile)]
@@ -57,6 +58,8 @@ lib.seq_unpack.argtypes = [c.POINTER(c.c_uint8), c.POINTER(Profile)]
 lib.seq_unpack.restype = c.c_bool
 lib.seq_sync.argtypes = [c.POINTER(Profile), c.POINTER(Frame), c.POINTER(c.c_int32)]
 lib.seq_sync.restype = c.c_bool
+lib.remote_name_valid.argtypes = [c.c_char_p]
+lib.remote_name_valid.restype = c.c_bool
 
 
 def permute(word):
@@ -180,6 +183,12 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(sync(p, w[0], prefix=prefix('remote_a'), suffix=1, count=1)[0])
         self.assertFalse(sync(p, w[0] ^ 0x8000, prefix=prefix('remote_a'))[0])
         self.assertEqual(bytes(p), before)
+
+    def test_remote_name_rules(self):
+        for good in ['Garage', 'Gate 2', 'front-door_1', 'A', 'x' * 12]:
+            self.assertTrue(lib.remote_name_valid(good.encode()), good)
+        for bad in ['', 'x' * 13, ' Gate', 'Gate ', 'a/b', 'a.b', 'a"b', 'café', 'a\tb']:
+            self.assertFalse(lib.remote_name_valid(bad.encode()), bad)
 
     def test_whole_counter_cycles(self):
         for step_, flag in [(0x3762, 0x8000), (0xd1c1, 0), (0xd1c2, 0x8000),
