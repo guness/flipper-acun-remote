@@ -125,7 +125,7 @@ presses or re-syncs a saved one.", "Saved sends, renames and deletes."
   SeqProfile profile; bool damaged; }`, rebuilt from disk at startup and after
   every save, sync, rename, delete or send. Directories or files that do not
   fit the naming pattern are ignored. If more than 32 entries exist, the first
-  32 in sort order load and the Saved list header reads "Saved · 32 max".
+  32 found load and the Saved list header reads "Saved (32 max)".
 - Limits: name 1–12 characters, button 1–8, 32 entries.
 
 ## Core addition: single-press sync

@@ -13,9 +13,16 @@ holds a host test suite for the C core and a build script.
 
 - `flipper_apps/acun_remote/` — the app.
   - `sequence_core.c/.h` — pure C, no `furi` includes. Bit permutation, five-press
-    fit, advance, pulse decoder and encoder, 64-byte journal record with CRC32.
-    This is the part the host tests exercise; keep it host-compilable.
-  - `acun_remote.c` — UI, radio and SD storage. Device only.
+    fit, advance, single-press sync, pulse decoder and encoder, 64-byte journal
+    record with CRC32. Host tests exercise this file.
+  - `remote_name.c/.h` — pure C name validation, also host-tested.
+  - `remote_store.c/.h` — SD layout (`<name>/<button>.<copy>.seq`), sorted
+    in-memory index, journal write with read-back, create, delete, rename.
+  - `radio.c/.h` — Sub-GHz RX capture with two-frame press confirmation, TX
+    drive, 25 s / 3 s timeouts; polled from the dispatcher tick.
+  - `acun_remote.c`, `acun_remote_i.h` — app struct, view dispatcher, scene
+    manager, shared view callbacks, result-popup helper.
+  - `scenes/` — one file per screen, X-macro registered in `acun_scene_config.h`.
   - `application.fam` — FAP manifest.
   - `dist/acun_remote.fap`, `dist/build_info.json` — the shipped build and
     its SDK/FAP hashes. `dist/debug/` and `.vscode/` are ignored.
@@ -59,8 +66,7 @@ outside this repo.
 
 ## Status
 
-The current UI is four fixed button slots on a hand-drawn view. A redesign is
-drafted (main menu Read / Saved / About, named remotes with numbered buttons in
-one list, single-press sync when a heard button matches, Send / Info / Rename /
-Delete per entry, stock Flipper views on `ViewDispatcher` + `SceneManager`,
-one directory per remote under app data). It is not implemented yet.
+Version 0.2: main menu Read / Saved / About, named remotes with numbered
+buttons in one sorted list, single-press sync when a heard button is already
+saved, Send / Info / Rename / Delete per entry. Built on `ViewDispatcher` +
+`SceneManager` with stock views. Hardware behaviour is still unverified.

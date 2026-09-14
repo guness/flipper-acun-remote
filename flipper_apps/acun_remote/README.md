@@ -1,52 +1,66 @@
 # Acun Remote
 
-Flipper Zero external app for a modular-accumulator remote protocol. Four
-persistent button slots; internal radio at **433.92 MHz**. This is not a
-generic KeeLoq learner.
+Flipper Zero external app for a modular-accumulator remote protocol. It learns
+a remote button from five consecutive presses, keeps that button's counter on
+the SD card, and sends the next value on demand. Internal radio at
+**433.92 MHz**. This is not a generic KeeLoq learner.
 
-## Install and use
+## Install
 
-Copy `dist/acun_remote.fap` to the Flipper SD card under `apps/Sub-GHz/`.
-The supplied build targets the local Unleashed SDK, hardware f7, API **88.11**.
+Copy `dist/acun_remote.fap` to the Flipper SD card under `apps/Sub-GHz/`. The
+supplied build targets the local Unleashed SDK, hardware f7, API **88.11**.
 Firmware with an incompatible API needs a rebuild against its own SDK.
 
-1. Open **Apps → Sub-GHz → Acun Remote**.
-2. Use **Up/Down** to select Button 1–4, then **Right** to learn it.
-3. Release the original remote. Press **OK** on the Flipper to listen, then
-   hold the desired original button until the screen reports a capture.
-4. Release it and repeat when prompted, for **five separate presses of the same
-   button**. Do not make extra presses between captures. Multiple packets from
-   one held press count as one capture; the app requires two identical complete
-   frames to confirm each captured press.
-5. Three presses fit the accumulator model; two further presses validate it.
-   Press **OK Save** after validation. An existing slot is replaced only when
-   saving the new result. A failed fit restarts learning.
-6. On the home screen, **OK** sends the next value. Six repetitions of that
-   same frame represent one press; the counter advances only once.
-7. **Left** shows parameters. **Back** cancels learning or exits from home.
-   Back during transmission stops the radio, but keeps the reserved index.
+## Use
 
-Each button is learned independently; the app does not assume that button slot
-numbers correspond to particular multipliers. Every remote and button variant is
-learned using the same fixed bit permutation.
+Open **Apps → Sub-GHz → Acun Remote**. The main menu has Read, Saved and About.
 
-## State and storage
+### Read
 
-For each slot the app saves the prefix, word flag, multiplier, current 16-bit
-accumulator, trailing symbols, timing, send-reservation count and generation.
-The displayed **Index** is the accumulator value, not an asserted factory
-counter. Each send adds the learned multiplier modulo 65536.
+Read listens as soon as it opens. Hold a button on the remote until the app
+reacts. A press counts once two identical complete frames have been heard.
 
-Data is stored in `apps_data/acun_remote/button_N_0.seq` and
-`button_N_1.seq`. These are versioned 64-byte little-endian records with CRC32.
-The two files alternate as a journal. Before radio transmission the next state
-is written, synced and read back. Failure blocks transmission. A cancelled or
-failed transmission may consume one index; it is never rolled back.
+- **Known button.** If the press matches a saved entry, the app names it and
+  says how far the physical remote is from the saved state, for example
+  "Remote is 3 presses ahead". **Sync** moves the saved counter to the heard
+  press. Syncing to a remote that is behind is allowed, but the receiver may
+  reject those codes and the dialog says so.
+- **New button.** Otherwise the app asks for the same button five times in a
+  row. Release between presses and do not press other buttons; a different
+  button is ignored with a hint. Three presses fit the counter model and two
+  validate it. Then pick an existing remote name or type a new one (1 to 12
+  letters, digits, spaces, `-` or `_`), choose a button number from 1 to 8,
+  and the entry is saved. If that name and number already exist you can
+  replace them.
+- Back leaves Read at any step. Twenty-five seconds without a press, a receive
+  overflow, or five presses that do not fit offer Retry or Cancel.
 
-On startup, a damaged record blocks the slot instead of reverting to a possibly
-already-transmitted older index. Relearning replaces both copies. Keep the SD
-card inserted while using the app. The frequency stays subject to the firmware's
-normal transmission-region checks.
+### Saved
+
+One list of every learned button, sorted by remote name and then number, for
+example "Garage B1", "Garage B2", "Gate B1". Open an entry for:
+
+- **Send** transmits the next value as six repeats of one press. The counter is
+  written to the SD card and read back before the radio starts. Back stops the
+  radio; the index stays advanced.
+- **Info** shows prefix, step, current word, index, send count, pulse count,
+  pulse timing and gap.
+- **Rename** changes the remote name or button number without relearning.
+- **Delete** removes the entry after a confirmation.
+
+An entry whose journal copy failed its checksum is listed as "(damaged)" and
+offers only Delete. Delete it, then Read the button again.
+
+## Storage
+
+Each remote is a directory under the app's data folder and each button a pair
+of journal files, for example `Garage/2.0.seq` and `Garage/2.1.seq`. Records
+are versioned 64-byte little-endian with CRC32. The two files alternate: before
+a send or sync the next state is written, synced and read back, and a failure
+blocks the action and marks the entry damaged. On load the copy with the higher
+generation wins. Files from the earlier fixed-slot version are ignored. Up to
+32 entries are listed. Keep the SD card inserted while using the app. The
+frequency stays subject to the firmware's normal transmission-region checks.
 
 ## Framing
 
@@ -77,13 +91,15 @@ firmware checkout. A normal `ufbt` build from this application directory also
 works when ufbt is configured with a compatible SDK. The FAP manifest supports
 building as an external application in a firmware checkout.
 
-Host tests compile the same C core used in the app and exercise five consecutive
+Host tests compile the same C core and name validator used in the app and
+exercise five consecutive
 recorded presses from each of two remotes and four buttons, ten complete 16-bit
 cycles, missing/corrupted/wrong-button samples, CRC corruption, and waveform
 generation with trailing symbols. The live-parser test decodes every recorded
 press and matches 45 of the 50 raw BinRAW blocks; noisy trailing pulses cause
 the other five to be rejected. BinRAW files lack the following gap, which this
-test explicitly restores.
+test explicitly restores. Sync is tested by moving a learned profile to every
+recorded press and to synthetic presses ahead of and behind it.
 
 Fixtures live under `tests/acun_remote/data`: one directory per recorded set
 (`remote_a`, `remote_b`, `button_1`–`button_4`) holding `press_1.sub` to
