@@ -4,10 +4,10 @@ App(
     apptype=FlipperAppType.EXTERNAL,
     entry_point="acun_remote_app",
     requires=["gui", "storage"],
-    stack_size=4096,
+    stack_size=5120,
     fap_category="Sub-GHz",
     fap_icon="icon.png",
-    fap_version="0.1",
+    fap_version="0.2",
     fap_author="Repository contributors",
-    fap_description="Learn and advance a modular-accumulator remote protocol",
+    fap_description="Learn, sync and send modular-accumulator remote buttons",
 )

@@ -1,0 +1,6 @@
+ADD_SCENE(acun, main_menu, MainMenu)
+ADD_SCENE(acun, about, About)
+ADD_SCENE(acun, saved_list, SavedList)
+ADD_SCENE(acun, entry_menu, EntryMenu)
+ADD_SCENE(acun, info, Info)
+ADD_SCENE(acun, delete_confirm, DeleteConfirm)
