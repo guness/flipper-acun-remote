@@ -14,6 +14,7 @@ void acun_scene_entry_menu_on_enter(void* context) {
     submenu_set_header(app->submenu, acun_selected_label(app));
     if(!entry->damaged) {
         submenu_add_item(app->submenu, "Info", EntryInfo, acun_submenu_callback, app);
+        submenu_add_item(app->submenu, "Rename", EntryRename, acun_submenu_callback, app);
     }
     submenu_add_item(app->submenu, "Delete", EntryDelete, acun_submenu_callback, app);
     submenu_set_selected_item(
@@ -29,6 +30,14 @@ bool acun_scene_entry_menu_on_event(void* context, SceneManagerEvent event) {
     case EntryInfo:
         scene_manager_next_scene(app->scene_manager, AcunSceneInfo);
         return true;
+    case EntryRename: {
+        const RemoteEntry* entry = &app->store.entries[app->selected];
+        app->flow = AcunFlowRename;
+        snprintf(app->name, sizeof(app->name), "%s", entry->name);
+        app->button = entry->button;
+        scene_manager_next_scene(app->scene_manager, AcunSceneNameSelect);
+        return true;
+    }
     case EntryDelete:
         scene_manager_next_scene(app->scene_manager, AcunSceneDeleteConfirm);
         return true;

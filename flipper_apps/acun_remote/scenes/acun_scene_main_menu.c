@@ -10,6 +10,7 @@ void acun_scene_main_menu_on_enter(void* context) {
     AcunApp* app = context;
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "Acun Remote");
+    submenu_add_item(app->submenu, "Read", MainMenuRead, acun_submenu_callback, app);
     submenu_add_item(app->submenu, "Saved", MainMenuSaved, acun_submenu_callback, app);
     submenu_add_item(app->submenu, "About", MainMenuAbout, acun_submenu_callback, app);
     submenu_set_selected_item(
@@ -22,6 +23,9 @@ bool acun_scene_main_menu_on_event(void* context, SceneManagerEvent event) {
     if(event.type != SceneManagerEventTypeCustom) return false;
     scene_manager_set_scene_state(app->scene_manager, AcunSceneMainMenu, event.event);
     switch(event.event) {
+    case MainMenuRead:
+        scene_manager_next_scene(app->scene_manager, AcunSceneReadListen);
+        return true;
     case MainMenuSaved:
         scene_manager_next_scene(app->scene_manager, AcunSceneSavedList);
         return true;
