@@ -13,6 +13,7 @@ void acun_scene_entry_menu_on_enter(void* context) {
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, acun_selected_label(app));
     if(!entry->damaged) {
+        submenu_add_item(app->submenu, "Send", EntrySend, acun_submenu_callback, app);
         submenu_add_item(app->submenu, "Info", EntryInfo, acun_submenu_callback, app);
         submenu_add_item(app->submenu, "Rename", EntryRename, acun_submenu_callback, app);
     }
@@ -27,6 +28,9 @@ bool acun_scene_entry_menu_on_event(void* context, SceneManagerEvent event) {
     if(event.type != SceneManagerEventTypeCustom) return false;
     scene_manager_set_scene_state(app->scene_manager, AcunSceneEntryMenu, event.event);
     switch(event.event) {
+    case EntrySend:
+        scene_manager_next_scene(app->scene_manager, AcunSceneSend);
+        return true;
     case EntryInfo:
         scene_manager_next_scene(app->scene_manager, AcunSceneInfo);
         return true;
