@@ -38,6 +38,10 @@ bool seq_same_button(const SeqFrame* a, const SeqFrame* b);
 bool seq_same_frame(const SeqFrame* a, const SeqFrame* b);
 bool seq_fit(const SeqFrame frames[SEQ_LEARN_COUNT], SeqProfile* result);
 void seq_advance(SeqProfile* profile);
+/* Move the profile to the accumulator implied by a heard press of the same
+ * button. delta receives presses ahead (>0) or behind (<0) of the saved state.
+ * Returns false if the frame is another button. sends is left unchanged. */
+bool seq_sync(SeqProfile* profile, const SeqFrame* heard, int32_t* delta);
 void seq_decoder_reset(SeqDecoder* decoder);
 bool seq_decode(SeqDecoder* decoder, bool level, uint32_t duration, SeqFrame* frame);
 /* Sequence of high/low pulses, final low is the learned inter-frame gap. */

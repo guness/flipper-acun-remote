@@ -62,6 +62,32 @@ void seq_advance(SeqProfile* profile) {
     ++profile->sends;
 }
 
+bool seq_sync(SeqProfile* profile, const SeqFrame* heard, int32_t* delta) {
+    if(!seq_same_button(&profile->frame, heard)) return false;
+    uint16_t z = seq_permute(heard->word & 0x7FFF);
+    uint16_t acc = profile->accumulator;
+    bool found = false;
+    int32_t best = 0;
+    uint16_t best_acc = 0;
+    /* Two accumulators fit a 15-bit word; keep the one nearest in signed presses. */
+    for(uint32_t k = 0; k < 65536u; ++k, acc += profile->step) {
+        if((acc >> 1) != z) continue;
+        int32_t d = k < 32768u ? (int32_t)k : (int32_t)k - 65536;
+        int32_t mag = d < 0 ? -d : d;
+        int32_t best_mag = best < 0 ? -best : best;
+        if(!found || mag < best_mag || (mag == best_mag && d > best)) {
+            best = d;
+            best_acc = acc;
+            found = true;
+        }
+    }
+    if(!found) return false;
+    profile->accumulator = best_acc;
+    profile->frame.word = heard->word;
+    *delta = best;
+    return true;
+}
+
 void seq_decoder_reset(SeqDecoder* decoder) {
     memset(decoder, 0, sizeof(*decoder));
 }

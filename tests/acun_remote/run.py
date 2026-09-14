@@ -55,6 +55,8 @@ lib.seq_pulse.restype = c.c_bool
 lib.seq_pack.argtypes = [c.POINTER(Profile), c.POINTER(c.c_uint8)]
 lib.seq_unpack.argtypes = [c.POINTER(c.c_uint8), c.POINTER(Profile)]
 lib.seq_unpack.restype = c.c_bool
+lib.seq_sync.argtypes = [c.POINTER(Profile), c.POINTER(Frame), c.POINTER(c.c_int32)]
+lib.seq_sync.restype = c.c_bool
 
 
 def permute(word):
@@ -103,6 +105,12 @@ def fit(words, **kwargs):
     return lib.seq_fit(inputs, c.byref(out)), out
 
 
+def sync(profile, word, **kwargs):
+    delta = c.c_int32()
+    ok = lib.seq_sync(c.byref(profile), c.byref(frame(word, **kwargs)), c.byref(delta))
+    return ok, delta.value
+
+
 class CoreTests(unittest.TestCase):
     def test_fixture_layout(self):
         self.assertEqual(sorted(SETS), ['button_1', 'button_2', 'button_3', 'button_4',
@@ -125,6 +133,53 @@ class CoreTests(unittest.TestCase):
                 for expected in w[1:]:
                     lib.seq_advance(c.byref(p))
                     self.assertEqual(p.frame.word, expected)
+
+    def test_sync_to_each_recorded_press(self):
+        """Hearing press i of a learned button moves the profile there and replay continues."""
+        for name in SETS:
+            with self.subTest(set=name):
+                w = words(name)
+                for i, heard in enumerate(w):
+                    _, p = fit(w, prefix=prefix(name))
+                    sends = p.sends
+                    ok, delta = sync(p, heard, prefix=prefix(name))
+                    self.assertTrue(ok)
+                    self.assertEqual(delta, i - (PRESSES - 1))
+                    self.assertEqual(p.frame.word, heard)
+                    self.assertEqual(p.sends, sends)
+                    for expected in w[i + 1:]:
+                        lib.seq_advance(c.byref(p))
+                        self.assertEqual(p.frame.word, expected)
+
+    def test_sync_ahead_and_behind(self):
+        for step_, flag in [(0x3762, 0x8000), (0xd1c1, 0), (0xd1c2, 0x8000),
+                            (0xd1c3, 0), (0xd1c4, 0x8000)]:
+            with self.subTest(step=step_):
+                seed = 0x1234
+                word_at = lambda i: flag | permute(((seed + i * step_) & 0xffff) >> 1)
+                ok, p = fit([word_at(i) for i in range(PRESSES)])
+                self.assertTrue(ok)
+                ok, delta = sync(p, word_at(7))
+                self.assertTrue(ok)
+                self.assertEqual(delta, 3)
+                lib.seq_advance(c.byref(p))
+                self.assertEqual(p.frame.word, word_at(8))
+                ok, delta = sync(p, word_at(2))
+                self.assertTrue(ok)
+                self.assertEqual(delta, -6)
+                limit = 65541 if step_ == 0x3762 else 40
+                for i in range(3, limit):
+                    lib.seq_advance(c.byref(p))
+                    self.assertEqual(p.frame.word, word_at(i))
+
+    def test_sync_rejects_other_button(self):
+        w = words('remote_a')
+        _, p = fit(w, prefix=prefix('remote_a'))
+        before = bytes(p)
+        self.assertFalse(sync(p, w[0], prefix=prefix('remote_a') ^ 1)[0])
+        self.assertFalse(sync(p, w[0], prefix=prefix('remote_a'), suffix=1, count=1)[0])
+        self.assertFalse(sync(p, w[0] ^ 0x8000, prefix=prefix('remote_a'))[0])
+        self.assertEqual(bytes(p), before)
 
     def test_whole_counter_cycles(self):
         for step_, flag in [(0x3762, 0x8000), (0xd1c1, 0), (0xd1c2, 0x8000),
