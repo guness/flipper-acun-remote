@@ -18,7 +18,7 @@ holds a host test suite for the C core and a build script.
   - `remote_name.c/.h` — pure C name validation, also host-tested.
   - `remote_store.c/.h` — SD layout (`<name>/<button>.<copy>.seq`), sorted
     in-memory index, journal write with read-back, create, delete, rename.
-  - `radio.c/.h` — Sub-GHz RX capture with two-frame press confirmation
+  - `radio.c/.h` — Sub-GHz RX capture with three-frame press confirmation
     (listening has no timeout), TX drive with a 3 s watchdog; polled from the
     dispatcher tick.
   - `acun_remote.c`, `acun_remote_i.h` — app struct, view dispatcher, scene

@@ -12,7 +12,6 @@ static void read_listen_draw(AcunApp* app) {
     widget_add_string_element(
         app->widget, 64, 27, AlignCenter, AlignTop, FontSecondary, "Hold a remote button");
     acun_draw_signal_bar(app->widget, READ_LISTEN_SIGNAL_BAR_Y, radio_rssi(app->radio));
-    acun_draw_diagnostics(app->widget, READ_LISTEN_SIGNAL_BAR_Y + 9, app->radio);
     view_dispatcher_switch_to_view(app->view_dispatcher, AcunViewWidget);
 }
 
@@ -29,7 +28,6 @@ void acun_scene_read_listen_on_enter(void* context) {
     app->learn_hint = false;
     app->selected = -1;
     app->signal_tick = 0;
-    app->blinked_raw_count = 0;
     notification_message_block(app->notifications, &sequence_display_backlight_enforce_on);
     radio_rx_start(app->radio);
     read_listen_draw(app);
@@ -38,7 +36,6 @@ void acun_scene_read_listen_on_enter(void* context) {
 bool acun_scene_read_listen_on_event(void* context, SceneManagerEvent event) {
     AcunApp* app = context;
     if(event.type == SceneManagerEventTypeTick) {
-        acun_blink_on_new_frame(app);
         if(++app->signal_tick % READ_LISTEN_SIGNAL_REDRAW_TICKS == 0) read_listen_draw(app);
         return false;
     }

@@ -18,7 +18,9 @@ Open **Apps → Sub-GHz → Acun Remote**. The main menu has Read, Saved and Abo
 ### Read
 
 Read listens as soon as it opens. Hold a button on the remote until the app
-reacts. A press counts once two identical complete frames have been heard.
+reacts. A press counts once three identical complete frames have been heard
+in a row; two was not enough to rule out a mid-transmission RF fade landing
+the same way on two consecutive repeats of the same physical press.
 
 - **Known button.** If the press matches a saved entry, the app names it and
   says how far the physical remote is from the saved state, for example

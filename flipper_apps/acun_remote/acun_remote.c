@@ -1,5 +1,14 @@
 #include "acun_remote_i.h"
 
+/* One short beep per confirmed press - the same tone and duration the
+ * firmware's own Sub-GHz reader uses for a received packet. */
+static const NotificationSequence sequence_acun_capture_beep = {
+    &message_note_c6,
+    &message_delay_50,
+    &message_sound_off,
+    NULL,
+};
+
 void acun_submenu_callback(void* context, uint32_t index) {
     AcunApp* app = context;
     view_dispatcher_send_custom_event(app->view_dispatcher, index);
@@ -81,40 +90,9 @@ const char* acun_selected_label(AcunApp* app) {
 
 void acun_draw_signal_bar(Widget* widget, uint8_t y, float rssi) {
     float clamped = rssi < -90.0f ? -90.0f : (rssi > -30.0f ? -30.0f : rssi);
-    uint8_t fill = (uint8_t)((clamped + 90.0f) / 60.0f * 88.0f);
-    char label[8];
-    snprintf(label, sizeof(label), "%d", (int)rssi);
-    widget_add_rect_element(widget, 2, y, 90, 7, 0, false);
-    if(fill) widget_add_rect_element(widget, 3, y + 1, fill, 5, 0, true);
-    widget_add_string_element(widget, 96, y, AlignLeft, AlignTop, FontSecondary, label);
-}
-
-void acun_blink_on_new_frame(AcunApp* app) {
-    uint32_t count = radio_raw_count(app->radio);
-    if(count == app->blinked_raw_count) return;
-    app->blinked_raw_count = count;
-    notification_message(app->notifications, &sequence_blink_green_10);
-}
-
-void acun_draw_diagnostics(Widget* widget, uint8_t y, const Radio* radio) {
-    /* Reception up to the decoder (edge/dequeued counts) is already known
-     * healthy; this narrows down what the decoder itself is doing with it.
-     * s: how many times it found a gap quiet enough to start counting from.
-     * m: its best run of consecutive bits before giving up or completing,
-     * out of the 47 a frame needs. r: frames actually completed. H/L + a
-     * number: the exact pulse that most recently broke a run at that count -
-     * a high pulse's or a low pulse's duration in microseconds. */
-    char line[32];
-    snprintf(
-        line,
-        sizeof(line),
-        "s%lu m%u r%lu %c%lu",
-        (unsigned long)radio_sync_count(radio),
-        radio_max_run(radio),
-        (unsigned long)radio_raw_count(radio),
-        radio_fail_was_high(radio) ? 'H' : 'L',
-        (unsigned long)radio_fail_duration(radio));
-    widget_add_string_element(widget, 2, y, AlignLeft, AlignTop, FontSecondary, line);
+    uint8_t fill = (uint8_t)((clamped + 90.0f) / 60.0f * 98.0f);
+    widget_add_rect_element(widget, 14, y, 100, 5, 0, false);
+    if(fill) widget_add_rect_element(widget, 15, y + 1, fill, 3, 0, true);
 }
 
 static bool acun_custom_event_callback(void* context, uint32_t event) {
@@ -134,6 +112,13 @@ static void acun_tick_event_callback(void* context) {
     switch(radio_tick(app->radio, &app->heard)) {
     case RadioEventPress:
         event = AcunEventPress;
+        /* A confirmed press (RADIO_PRESS_CONFIRM_FRAMES agreeing frames) is a
+         * meaningful, naturally rate-limited event - unlike every raw decoded
+         * frame, which during a held button can arrive every 20-40ms and
+         * would flood the notification service's 8-slot queue with a blink
+         * and a beep each. */
+        notification_message(app->notifications, &sequence_blink_green_100);
+        notification_message(app->notifications, &sequence_acun_capture_beep);
         break;
     case RadioEventOverflow:
         event = AcunEventRxOverflow;

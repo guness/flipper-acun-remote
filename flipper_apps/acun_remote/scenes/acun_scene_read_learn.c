@@ -1,24 +1,23 @@
 #include "../acun_remote_i.h"
 
-#define READ_LEARN_SIGNAL_BAR_Y 44
+#define READ_LEARN_SIGNAL_BAR_Y 49
 #define READ_LEARN_SIGNAL_REDRAW_TICKS 10 /* ~100ms at the 10ms dispatcher tick */
 
 static void read_learn_draw(AcunApp* app) {
     char line[32];
     snprintf(line, sizeof(line), "Press %u of %u", app->captured_count + 1u, SEQ_LEARN_COUNT);
     widget_reset(app->widget);
-    widget_add_string_element(app->widget, 64, 0, AlignCenter, AlignTop, FontPrimary, "New remote");
-    widget_add_string_element(app->widget, 64, 11, AlignCenter, AlignTop, FontPrimary, line);
+    widget_add_string_element(app->widget, 64, 1, AlignCenter, AlignTop, FontPrimary, "New remote");
+    widget_add_string_element(app->widget, 64, 13, AlignCenter, AlignTop, FontPrimary, line);
     widget_add_string_multiline_element(
         app->widget,
         64,
-        22,
+        26,
         AlignCenter,
         AlignTop,
         FontSecondary,
         app->learn_hint ? app->text2 : "Release, then press\nthe same button again.");
     acun_draw_signal_bar(app->widget, READ_LEARN_SIGNAL_BAR_Y, radio_rssi(app->radio));
-    acun_draw_diagnostics(app->widget, READ_LEARN_SIGNAL_BAR_Y + 9, app->radio);
     view_dispatcher_switch_to_view(app->view_dispatcher, AcunViewWidget);
 }
 
@@ -32,7 +31,6 @@ void acun_scene_read_learn_on_enter(void* context) {
     AcunApp* app = context;
     app->learn_hint = false;
     app->signal_tick = 0;
-    app->blinked_raw_count = 0;
     notification_message_block(app->notifications, &sequence_display_backlight_enforce_on);
     radio_rx_start(app->radio);
     read_learn_draw(app);
@@ -45,7 +43,6 @@ bool acun_scene_read_learn_on_event(void* context, SceneManagerEvent event) {
         return true;
     }
     if(event.type == SceneManagerEventTypeTick) {
-        acun_blink_on_new_frame(app);
         if(++app->signal_tick % READ_LEARN_SIGNAL_REDRAW_TICKS == 0) read_learn_draw(app);
         return false;
     }

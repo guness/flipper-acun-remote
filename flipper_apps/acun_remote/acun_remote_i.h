@@ -96,7 +96,6 @@ typedef struct {
     char text[48]; /* popup header: Popup keeps the pointer */
     char text2[96]; /* popup or dialog body */
     uint32_t signal_tick; /* throttles the signal-bar redraw against the 10ms tick */
-    uint32_t blinked_raw_count; /* last radio_raw_count() the LED already blinked for */
 } AcunApp;
 
 /* Shared view callbacks; each forwards to the scene manager as a custom event. */
@@ -112,14 +111,7 @@ void acun_popup_show(AcunApp* app, const char* header, const char* text, AcunAft
 void acun_popup_done(AcunApp* app);
 /* Label of store entry app->selected, written to app->label. */
 const char* acun_selected_label(AcunApp* app);
-/* Draw a signal-strength bar and its dBm reading at the given y on a Widget
- * already mid-build (call after the screen's other elements, before switching
- * to it). -90dBm (no signal) to -30dBm (strong) fills the bar 0-100%. */
+/* Draw a signal-strength bar at the given y on a Widget already mid-build
+ * (call after the screen's other elements, before switching to it). -90dBm
+ * (no signal) to -30dBm (strong) fills the bar 0-100%. */
 void acun_draw_signal_bar(Widget* widget, uint8_t y, float rssi);
-/* Draw the decoder-side diagnostics from radio.h: how many times it found a
- * quiet gap to start from, its best run of consecutive bits out of 47, frames
- * actually completed, and the exact pulse that most recently broke a run. */
-void acun_draw_diagnostics(Widget* widget, uint8_t y, const Radio* radio);
-/* Blink the LED green when radio_raw_count() has grown since the last call,
- * i.e. real reception activity, same as the firmware's own Sub-GHz reader. */
-void acun_blink_on_new_frame(AcunApp* app);
