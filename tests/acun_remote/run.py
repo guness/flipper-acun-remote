@@ -20,7 +20,7 @@ DATA = HERE / 'data'
 SETS = json.loads((DATA / 'expected.json').read_text())
 PRESSES = 5
 GAP = 12300  # Inter-frame gap in microseconds; BinRAW blocks omit it.
-DECODED_BLOCKS_FLOOR = 45  # of 50 recorded blocks; the rest carry trailing noise.
+DECODED_BLOCKS_FLOOR = 50  # of 50 recorded blocks; decode no longer waits on trailing pulses.
 
 
 class Frame(c.Structure):
@@ -36,7 +36,8 @@ class Profile(c.Structure):
 
 class Decoder(c.Structure):
     _fields_ = [('synchronized', c.c_bool), ('pending_low', c.c_bool),
-                ('count', c.c_uint8), ('bits', c.c_uint64), ('units_sum', c.c_uint32)]
+                ('count', c.c_uint8), ('bits', c.c_uint64), ('units_sum', c.c_uint32),
+                ('last_gap', c.c_uint32)]
 
 
 TMP = tempfile.TemporaryDirectory(prefix='sequence-core-')
@@ -48,6 +49,8 @@ subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-shared', '-fP
 lib = c.CDLL(str(LIBRARY))
 lib.seq_fit.argtypes = [c.POINTER(Frame), c.POINTER(Profile)]
 lib.seq_fit.restype = c.c_bool
+lib.seq_same_frame.argtypes = [c.POINTER(Frame), c.POINTER(Frame)]
+lib.seq_same_frame.restype = c.c_bool
 lib.seq_advance.argtypes = [c.POINTER(Profile)]
 lib.seq_decode.argtypes = [c.POINTER(Decoder), c.c_bool, c.c_uint32, c.POINTER(Frame)]
 lib.seq_decode.restype = c.c_bool
@@ -180,7 +183,6 @@ class CoreTests(unittest.TestCase):
         _, p = fit(w, prefix=prefix('remote_a'))
         before = bytes(p)
         self.assertFalse(sync(p, w[0], prefix=prefix('remote_a') ^ 1)[0])
-        self.assertFalse(sync(p, w[0], prefix=prefix('remote_a'), suffix=1, count=1)[0])
         self.assertFalse(sync(p, w[0] ^ 0x8000, prefix=prefix('remote_a'))[0])
         self.assertEqual(bytes(p), before)
 
@@ -212,8 +214,19 @@ class CoreTests(unittest.TestCase):
         inputs[3].prefix ^= 1
         self.assertFalse(lib.seq_fit(inputs, c.byref(Profile())))  # other remote
         inputs[3].prefix ^= 1
-        inputs[3].suffix_count = 1
-        self.assertFalse(lib.seq_fit(inputs, c.byref(Profile())))  # other button tail
+        inputs[3].word ^= 0x8000
+        self.assertFalse(lib.seq_fit(inputs, c.byref(Profile())))  # other button flag
+
+    def test_tail_variations_are_the_same_press(self):
+        for name in SETS:
+            w = words(name)
+            original = frame(w[0], prefix=prefix(name))
+            for count, suffix in ((0, 0), (1, 0), (1, 1), (2, 2)):
+                heard = frame(w[0], prefix=prefix(name), suffix=suffix, count=count)
+                self.assertTrue(lib.seq_same_frame(c.byref(original), c.byref(heard)))
+                _, p = fit(w, prefix=prefix(name))
+                self.assertTrue(sync(p, w[0], prefix=prefix(name),
+                                     suffix=suffix, count=count)[0])
 
     def test_journal_crc_roundtrip(self):
         _, p = fit(words('remote_a'))
@@ -235,6 +248,9 @@ class CoreTests(unittest.TestCase):
             raw[offset] ^= 1
 
     def test_waveform_roundtrip_including_suffix(self):
+        """Extra trailing pulses beyond the core 47 bits don't corrupt them; the
+        decoder emits the moment bit 47 completes and never reports a suffix,
+        since it no longer waits for a gap to find out whether one follows."""
         for tail_count in (0, 1, 8):
             for word in (0, 0xffff, 0xa0e7, 0x6d99):
                 original = frame(word, suffix=(1 << tail_count) - 1, count=tail_count)
@@ -248,15 +264,90 @@ class CoreTests(unittest.TestCase):
                 self.assertEqual(hits, 1)
                 self.assertEqual(received.word, original.word)
                 self.assertEqual(received.prefix, original.prefix)
-                self.assertEqual(received.suffix_count, tail_count)
-                self.assertEqual(received.suffix, original.suffix)
+                self.assertEqual(received.suffix_count, 0)
+                self.assertEqual(received.suffix, 0)
+
+    def test_repeats_decode_with_any_or_no_gap_between_them(self):
+        """A held button can resend far faster than any gap threshold could
+        safely wait for. Every repeat must decode whether it's separated from
+        the next by a long gap, a short one, or none at all."""
+        def pulses(original):
+            out = []
+            for i in range(2 * 47):
+                level, duration = c.c_bool(), c.c_uint32()
+                self.assertTrue(lib.seq_pulse(c.byref(original), i, c.byref(level), c.byref(duration)))
+                out.append((level.value, duration.value))
+            return out
+
+        def with_trailing_low(pulse_list, duration):
+            (level, _) = pulse_list[-1]
+            self.assertFalse(level)
+            return pulse_list[:-1] + [(False, duration)]
+
+        original = frame(0x6d99, prefix=0x1f550c4)  # bit 47 is long: high_long minimum is 200us
+        one_repeat = pulses(original)
+        for gap in (200, 300, 800, 1500, 2500, 5900, 12300):
+            with self.subTest(gap=gap):
+                decoder, received = Decoder(), Frame()
+                stream = ([(False, GAP)] + with_trailing_low(one_repeat, gap) +
+                          one_repeat)  # second repeat immediately follows, no leading sync needed
+                hits = sum(lib.seq_decode(c.byref(decoder), level, duration, c.byref(received))
+                           for level, duration in stream)
+                self.assertEqual(hits, 2)
+                self.assertEqual(received.word, original.word)
+                self.assertEqual(received.prefix, original.prefix)
+
+    def test_implausibly_short_trailing_low_still_desyncs(self):
+        """The 47th bit's low still needs to look like a real pulse; a duration
+        below even its own minimum is desync, not a fast repeat."""
+        def pulses(original):
+            out = []
+            for i in range(2 * 47):
+                level, duration = c.c_bool(), c.c_uint32()
+                lib.seq_pulse(c.byref(original), i, c.byref(level), c.byref(duration))
+                out.append((level.value, duration.value))
+            return out
+
+        original = frame(0x6d99, prefix=0x1f550c4)  # bit 47 is long: minimum is 200us
+        one_repeat = pulses(original)
+        stream = [(False, GAP)] + one_repeat[:-1] + [(False, 50)]
+        decoder, received = Decoder(), Frame()
+        hits = sum(lib.seq_decode(c.byref(decoder), level, duration, c.byref(received))
+                   for level, duration in stream)
+        self.assertEqual(hits, 0)
+
+    def test_recovers_after_a_mid_frame_failure(self):
+        """A single bad pulse must not permanently jam the decoder. Regression
+        for a bug where a failed attempt left pending_low stuck true, so every
+        later high pulse looked pending forever and failed instantly - the
+        decoder never produced another frame for the rest of the session no
+        matter how many times it resynchronized afterward."""
+        original = frame(0x6d99, prefix=0x1f550c4)
+        decoder, received = Decoder(), Frame()
+        # Sync, take a few good bits, then break the run with an implausible
+        # high pulse (fits neither the short nor the long cluster).
+        stream = [(False, GAP), (True, 300), (False, 1200), (True, 300), (False, 1200), (True, 5)]
+        for level, duration in stream:
+            self.assertFalse(lib.seq_decode(c.byref(decoder), level, duration, c.byref(received)))
+        # A real gap, then a complete, valid frame: this must still decode.
+        self.assertFalse(lib.seq_decode(c.byref(decoder), False, GAP, c.byref(received)))
+        hits = 0
+        for i in range(2 * 47):
+            level, duration = c.c_bool(), c.c_uint32()
+            self.assertTrue(lib.seq_pulse(c.byref(original), i, c.byref(level), c.byref(duration)))
+            hits += lib.seq_decode(c.byref(decoder), level.value, duration.value, c.byref(received))
+        self.assertEqual(hits, 1)
+        self.assertEqual(received.word, original.word)
+        self.assertEqual(received.prefix, original.prefix)
 
     def test_live_decoder_on_recordings(self):
         """The C pulse decoder recovers every recorded press from its raw BinRAW pulses."""
         blocks = matched = 0
         for name in SETS:
+            captured = []
             for path, expected in zip(recordings(name), words(name)):
                 decoded = 0
+                first = None
                 for data, n, te in binraw_blocks(path):
                     blocks += 1
                     samples = ''.join(f'{b:08b}' for b in data)[:n]
@@ -271,9 +362,16 @@ class CoreTests(unittest.TestCase):
                     if hit:
                         self.assertEqual(result.word, expected, path)
                         self.assertEqual(result.prefix, prefix(name), path)
+                        if first is None:
+                            first = Frame.from_buffer_copy(result)
+                        self.assertTrue(lib.seq_same_frame(c.byref(first), c.byref(result)), path)
                         decoded += 1
                 self.assertGreater(decoded, 0, f'{path} yielded no frame')
+                captured.append(first)
                 matched += decoded
+            profile = Profile()
+            self.assertTrue(lib.seq_fit((Frame * PRESSES)(*captured), c.byref(profile)), name)
+            self.assertEqual(profile.step, step(name))
         print(f'Live decoder matched {matched}/{blocks} recorded blocks')
         self.assertGreaterEqual(matched, DECODED_BLOCKS_FLOOR)
 

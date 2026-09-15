@@ -4,9 +4,17 @@
 #include <stdint.h>
 
 #define SEQ_LEARN_COUNT 5
-#define SEQ_MAX_BITS 55
 #define SEQ_RECORD_SIZE 64
 #define SEQ_FREQUENCY 433920000u
+/* A low pulse at least this long is real silence between button presses, not
+ * data. It resynchronizes the decoder but no longer gates when a frame is
+ * considered complete (see seq_decode): some remotes repeat faster than any
+ * gap threshold could safely catch, so frames are emitted every 47 bits,
+ * back to back, with no gap required between them at all. */
+#define SEQ_GAP_MIN_US 2500u
+/* Used for a frame's stored playback gap when none has been observed yet
+ * this session (kept within SEQ_GAP_MIN_US..60000, same as a real one). */
+#define SEQ_GAP_DEFAULT_US 12300u
 
 typedef struct {
     uint32_t prefix;
@@ -31,6 +39,7 @@ typedef struct {
     uint8_t count;
     uint64_t bits;
     uint32_t units_sum;
+    uint32_t last_gap; /* most recent real silence seen; reused as each frame's gap */
 } SeqDecoder;
 
 uint16_t seq_permute(uint16_t word);

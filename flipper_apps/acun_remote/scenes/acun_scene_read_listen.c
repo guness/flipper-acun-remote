@@ -1,5 +1,21 @@
 #include "../acun_remote_i.h"
 
+#define READ_LISTEN_SIGNAL_BAR_Y 48
+#define READ_LISTEN_SIGNAL_REDRAW_TICKS 10 /* ~100ms at the 10ms dispatcher tick */
+
+static void read_listen_draw(AcunApp* app) {
+    widget_reset(app->widget);
+    widget_add_string_element(
+        app->widget, 64, 1, AlignCenter, AlignTop, FontPrimary, "Listening");
+    widget_add_string_element(
+        app->widget, 64, 15, AlignCenter, AlignTop, FontSecondary, "433.92 MHz");
+    widget_add_string_element(
+        app->widget, 64, 27, AlignCenter, AlignTop, FontSecondary, "Hold a remote button");
+    acun_draw_signal_bar(app->widget, READ_LISTEN_SIGNAL_BAR_Y, radio_rssi(app->radio));
+    acun_draw_diagnostics(app->widget, READ_LISTEN_SIGNAL_BAR_Y + 9, app->radio);
+    view_dispatcher_switch_to_view(app->view_dispatcher, AcunViewWidget);
+}
+
 static void read_listen_retry(AcunApp* app, const char* text, bool allowed) {
     app->retry_text = text;
     app->retry_allowed = allowed;
@@ -12,16 +28,20 @@ void acun_scene_read_listen_on_enter(void* context) {
     app->captured_count = 0;
     app->learn_hint = false;
     app->selected = -1;
+    app->signal_tick = 0;
+    app->blinked_raw_count = 0;
+    notification_message_block(app->notifications, &sequence_display_backlight_enforce_on);
     radio_rx_start(app->radio);
-    popup_reset(app->popup);
-    popup_set_header(app->popup, "Listening 433.92 MHz", 64, 12, AlignCenter, AlignCenter);
-    popup_set_text(app->popup, "Hold a remote button", 64, 36, AlignCenter, AlignCenter);
-    popup_disable_timeout(app->popup);
-    view_dispatcher_switch_to_view(app->view_dispatcher, AcunViewPopup);
+    read_listen_draw(app);
 }
 
 bool acun_scene_read_listen_on_event(void* context, SceneManagerEvent event) {
     AcunApp* app = context;
+    if(event.type == SceneManagerEventTypeTick) {
+        acun_blink_on_new_frame(app);
+        if(++app->signal_tick % READ_LISTEN_SIGNAL_REDRAW_TICKS == 0) read_listen_draw(app);
+        return false;
+    }
     if(event.type != SceneManagerEventTypeCustom) return false;
     switch(event.event) {
     case AcunEventPress: {
@@ -52,9 +72,6 @@ bool acun_scene_read_listen_on_event(void* context, SceneManagerEvent event) {
     case AcunEventRxOverflow:
         read_listen_retry(app, "Receive overflow.\nTry again?", true);
         return true;
-    case AcunEventRxTimeout:
-        read_listen_retry(app, "No press heard.\nTry again?", true);
-        return true;
     }
     return false;
 }
@@ -62,5 +79,6 @@ bool acun_scene_read_listen_on_event(void* context, SceneManagerEvent event) {
 void acun_scene_read_listen_on_exit(void* context) {
     AcunApp* app = context;
     radio_stop(app->radio);
-    popup_reset(app->popup);
+    widget_reset(app->widget);
+    notification_message(app->notifications, &sequence_display_backlight_enforce_auto);
 }

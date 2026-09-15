@@ -32,8 +32,8 @@ reacts. A press counts once two identical complete frames have been heard.
   letters, digits, spaces, `-` or `_`), choose a button number from 1 to 8,
   and the entry is saved. If that name and number already exist you can
   replace them.
-- Back leaves Read at any step. Twenty-five seconds without a press, a receive
-  overflow, or five presses that do not fit offer Retry or Cancel.
+- Back leaves Read at any step. Listening has no timeout; a receive overflow,
+  or five presses that do not fit, offer Retry or Cancel.
 
 ### Saved
 
@@ -64,16 +64,25 @@ frequency stays subject to the firmware's normal transmission-region checks.
 
 ## Framing
 
-Live decoding uses complete gap-to-gap pulse sequences, not the padded BinRAW
-bytes. It decodes the first 47 symbols as the prefix/word layout
-and preserves up to eight additional trailing symbols. Prefix, word flag and
-trailing symbols must stay constant across learning captures. Highs must belong
-to the short/long pulse clusters, lows must complement them, and mean TE must be
-250–550 microseconds. Transmission regenerates PWM with the learned TE and gap.
+Live decoding reads the first 47 symbols as the prefix/word layout and emits
+that frame the instant they complete, rather than waiting for a gap first. A
+held button can repeat far faster than any gap threshold could safely wait
+for, so decoding no longer depends on one: the very next high pulse is read
+as the first bit of the next frame, with no silence required in between.
+Genuine silence between separate button presses still resynchronizes the
+decoder and is remembered for a learned button's own playback gap, but it no
+longer gates whether a frame is considered complete. A frame's later pulses
+are ignored, and every saved button now carries no trailing symbols. Highs
+must belong to the short/long pulse clusters, lows must complement them, and
+mean TE must be 250–550 microseconds. Raw pulse edges shorter than 30
+microseconds are treated as RF ringing and merged into the pulse they
+interrupted, the same filter the firmware's own Sub-GHz reader applies.
+Transmission regenerates PWM with the learned TE and gap.
 
-This avoids assuming that the whole protocol is exactly 47 bits. Inconsistent
-tails, different buttons, missing presses, and incompatible sequences prevent
-learning rather than being guessed. Overflow and timeout allow another attempt.
+This avoids assuming that the whole protocol is exactly 47 bits, while no
+longer assuming repeats are spaced apart either. Different buttons, missing
+presses, and incompatible sequences prevent learning rather than being
+guessed. Overflow allows another attempt.
 
 ## Build and verification
 
@@ -93,14 +102,14 @@ works when ufbt is configured with a compatible SDK. The FAP manifest supports
 building as an external application in a firmware checkout.
 
 Host tests compile the same C core and name validator used in the app and
-exercise five consecutive
-recorded presses from each of two remotes and four buttons, ten complete 16-bit
-cycles, missing/corrupted/wrong-button samples, CRC corruption, and waveform
-generation with trailing symbols. The live-parser test decodes every recorded
-press and matches 45 of the 50 raw BinRAW blocks; noisy trailing pulses cause
-the other five to be rejected. BinRAW files lack the following gap, which this
-test explicitly restores. Sync is tested by moving a learned profile to every
-recorded press and to synthetic presses ahead of and behind it.
+exercise five consecutive recorded presses from each of two remotes and four
+buttons, ten complete 16-bit cycles, missing/corrupted/wrong-button samples,
+CRC corruption, and waveform generation with trailing pulses that no longer
+affect a saved button's identity. The live-parser test decodes every one of
+the 50 raw BinRAW blocks, back to back with any gap or none between them.
+BinRAW files lack the following gap, which this test explicitly restores.
+Sync is tested by moving a learned profile to every recorded press and to
+synthetic presses ahead of and behind it.
 
 Fixtures live under `tests/acun_remote/data`: one directory per recorded set
 (`remote_a`, `remote_b`, `button_1`–`button_4`) holding `press_1.sub` to

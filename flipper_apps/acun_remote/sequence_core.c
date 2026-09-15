@@ -8,8 +8,9 @@ uint16_t seq_permute(uint16_t word) {
 }
 
 bool seq_same_button(const SeqFrame* a, const SeqFrame* b) {
-    return a->prefix == b->prefix && ((a->word ^ b->word) & 0x8000) == 0 &&
-           a->suffix == b->suffix && a->suffix_count == b->suffix_count;
+    /* Trailing pulses can vary within one press. Keep them for playback,
+     * but identify the button using only the prefix and fixed word flag. */
+    return a->prefix == b->prefix && ((a->word ^ b->word) & 0x8000) == 0;
 }
 
 bool seq_same_frame(const SeqFrame* a, const SeqFrame* b) {
@@ -92,49 +93,80 @@ void seq_decoder_reset(SeqDecoder* decoder) {
     memset(decoder, 0, sizeof(*decoder));
 }
 
+/* Clear an in-progress bit run without touching synchronized or last_gap:
+ * used on a validation failure (caller sets synchronized itself) and after a
+ * successful emission. Leaving this to bare field assignments at each call
+ * site was the bug - pending_low stuck true after any single bad pulse
+ * meant every high pulse looked pending forever and failed instantly, no
+ * matter how many times the decoder went on to resynchronize. */
+static void seq_decoder_clear_run(SeqDecoder* d) {
+    d->pending_low = false;
+    d->count = 0;
+    d->bits = 0;
+    d->units_sum = 0;
+}
+
 bool seq_decode(SeqDecoder* d, bool level, uint32_t duration, SeqFrame* frame) {
-    if(!level && duration >= 6000) {
-        bool valid = d->synchronized && d->pending_low && d->count >= 47 &&
-                     d->count <= SEQ_MAX_BITS && duration <= 60000;
-        if(valid) {
-            uint8_t tail = d->count - 47;
-            uint64_t value = d->bits >> tail;
-            memset(frame, 0, sizeof(*frame));
-            frame->prefix = value >> 16;
-            frame->word = value & 0xFFFF;
-            frame->suffix_count = tail;
-            frame->suffix = d->bits & ((1u << tail) - 1u);
-            frame->te = d->units_sum / d->count;
-            frame->gap = duration;
-            valid = frame->te >= 250 && frame->te <= 550;
-        }
-        seq_decoder_reset(d);
-        d->synchronized = true;
-        return valid;
-    }
-    if(!d->synchronized) return false;
     if(level) {
+        if(!d->synchronized) return false;
         bool short_pulse = duration >= 200 && duration <= 650;
         bool long_pulse = duration >= 800 && duration <= 1650;
-        if(d->pending_low || d->count == SEQ_MAX_BITS || (!short_pulse && !long_pulse)) {
-            seq_decoder_reset(d);
+        if(d->pending_low || (!short_pulse && !long_pulse)) {
+            /* A high while one wasn't expected, or one that fits neither
+             * cluster: whatever was mid-flight doesn't parse. Wait for real
+             * silence before trying again rather than guessing. */
+            seq_decoder_clear_run(d);
+            d->synchronized = false;
             return false;
         }
         d->bits = (d->bits << 1) | long_pulse;
         d->units_sum += duration / (long_pulse ? 3u : 1u);
         ++d->count;
         d->pending_low = true;
-    } else {
-        bool high_long = d->bits & 1;
-        bool valid_low = high_long ? duration >= 200 && duration <= 750 :
-                                    duration >= 800 && duration <= 1800;
-        if(!d->pending_low || !valid_low) {
-            seq_decoder_reset(d);
-            return false;
-        }
-        d->pending_low = false;
+        return false;
     }
-    return false;
+    /* Low pulse. */
+    if(!d->synchronized || !d->pending_low) {
+        /* Silence where a bit's low was already handled, or where none was
+         * even pending: nothing to complete. Sustained silence still marks a
+         * real boundary between button presses, worth remembering for the
+         * next frame's stored playback gap, and (re)synchronizes; anything
+         * shorter is just quiet between transmissions either way. */
+        if(duration >= SEQ_GAP_MIN_US) {
+            d->last_gap = duration > 60000 ? 60000 : duration;
+            d->synchronized = true;
+        }
+        return false;
+    }
+    /* This bit's low. A held button's repeats can follow in well under
+     * SEQ_GAP_MIN_US, so the 47th bit's low is accepted for any duration at
+     * least as long as its own minimum: short if the high was long, long if
+     * the high was short. Real silence after the very last bit is exactly
+     * that low pulse simply running on, not a separate event. Every earlier
+     * bit keeps the tight upper bound, since a mid-frame pulse that long is
+     * far more likely to be desync than a legitimate pause. */
+    bool high_long = d->bits & 1;
+    bool last_bit = d->count == 47;
+    bool valid_low = high_long ? duration >= 200 && (last_bit || duration <= 750) :
+                                 duration >= 800 && (last_bit || duration <= 1800);
+    if(!valid_low) {
+        seq_decoder_clear_run(d);
+        d->synchronized = false;
+        return false;
+    }
+    d->pending_low = false;
+    if(!last_bit) return false;
+    if(duration >= SEQ_GAP_MIN_US) d->last_gap = duration > 60000 ? 60000 : duration;
+    /* 47 bits complete: emit immediately and start the next frame right
+     * away, with no gap required before its first high pulse. */
+    memset(frame, 0, sizeof(*frame));
+    frame->prefix = d->bits >> 16;
+    frame->word = d->bits & 0xFFFF;
+    frame->te = d->units_sum / d->count;
+    frame->gap = d->last_gap ? d->last_gap : SEQ_GAP_DEFAULT_US;
+    bool valid = frame->te >= 250 && frame->te <= 550;
+    seq_decoder_clear_run(d);
+    return valid;
 }
 
 bool seq_pulse(const SeqFrame* frame, size_t index, bool* level, uint32_t* duration) {
@@ -190,7 +222,7 @@ bool seq_unpack(const uint8_t b[SEQ_RECORD_SIZE], SeqProfile* p) {
        get32(b + 12) != SEQ_FREQUENCY || get32(b + 16) > 0x7FFFFFFF ||
        get32(b + 20) > 0xFFFF || !get32(b + 24) || get32(b + 24) > 0xFFFF ||
        get32(b + 28) > 0xFFFF || get32(b + 36) < 250 || get32(b + 36) > 550 ||
-       get32(b + 40) < 6000 || get32(b + 40) > 60000 || get32(b + 48) > 8 ||
+       get32(b + 40) < SEQ_GAP_MIN_US || get32(b + 40) > 60000 || get32(b + 48) > 8 ||
        get32(b + 44) >= (1u << get32(b + 48))) return false;
     memset(p, 0, sizeof(*p));
     p->generation = get32(b + 8);

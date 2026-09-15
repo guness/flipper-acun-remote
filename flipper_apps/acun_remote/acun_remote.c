@@ -79,6 +79,44 @@ const char* acun_selected_label(AcunApp* app) {
     return app->label;
 }
 
+void acun_draw_signal_bar(Widget* widget, uint8_t y, float rssi) {
+    float clamped = rssi < -90.0f ? -90.0f : (rssi > -30.0f ? -30.0f : rssi);
+    uint8_t fill = (uint8_t)((clamped + 90.0f) / 60.0f * 88.0f);
+    char label[8];
+    snprintf(label, sizeof(label), "%d", (int)rssi);
+    widget_add_rect_element(widget, 2, y, 90, 7, 0, false);
+    if(fill) widget_add_rect_element(widget, 3, y + 1, fill, 5, 0, true);
+    widget_add_string_element(widget, 96, y, AlignLeft, AlignTop, FontSecondary, label);
+}
+
+void acun_blink_on_new_frame(AcunApp* app) {
+    uint32_t count = radio_raw_count(app->radio);
+    if(count == app->blinked_raw_count) return;
+    app->blinked_raw_count = count;
+    notification_message(app->notifications, &sequence_blink_green_10);
+}
+
+void acun_draw_diagnostics(Widget* widget, uint8_t y, const Radio* radio) {
+    /* Reception up to the decoder (edge/dequeued counts) is already known
+     * healthy; this narrows down what the decoder itself is doing with it.
+     * s: how many times it found a gap quiet enough to start counting from.
+     * m: its best run of consecutive bits before giving up or completing,
+     * out of the 47 a frame needs. r: frames actually completed. H/L + a
+     * number: the exact pulse that most recently broke a run at that count -
+     * a high pulse's or a low pulse's duration in microseconds. */
+    char line[32];
+    snprintf(
+        line,
+        sizeof(line),
+        "s%lu m%u r%lu %c%lu",
+        (unsigned long)radio_sync_count(radio),
+        radio_max_run(radio),
+        (unsigned long)radio_raw_count(radio),
+        radio_fail_was_high(radio) ? 'H' : 'L',
+        (unsigned long)radio_fail_duration(radio));
+    widget_add_string_element(widget, 2, y, AlignLeft, AlignTop, FontSecondary, line);
+}
+
 static bool acun_custom_event_callback(void* context, uint32_t event) {
     AcunApp* app = context;
     return scene_manager_handle_custom_event(app->scene_manager, event);
@@ -100,9 +138,6 @@ static void acun_tick_event_callback(void* context) {
     case RadioEventOverflow:
         event = AcunEventRxOverflow;
         break;
-    case RadioEventRxTimeout:
-        event = AcunEventRxTimeout;
-        break;
     case RadioEventTxDone:
         event = AcunEventTxDone;
         break;
@@ -122,6 +157,7 @@ static AcunApp* acun_alloc(void) {
     app->selected = -1;
     app->gui = furi_record_open(RECORD_GUI);
     app->storage = furi_record_open(RECORD_STORAGE);
+    app->notifications = furi_record_open(RECORD_NOTIFICATION);
     app->view_dispatcher = view_dispatcher_alloc();
     app->scene_manager = scene_manager_alloc(&acun_scene_handlers, app);
     view_dispatcher_set_event_callback_context(app->view_dispatcher, app);
@@ -167,6 +203,7 @@ static void acun_free(AcunApp* app) {
     popup_free(app->popup);
     scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);
+    furi_record_close(RECORD_NOTIFICATION);
     furi_record_close(RECORD_STORAGE);
     furi_record_close(RECORD_GUI);
     free(app);
