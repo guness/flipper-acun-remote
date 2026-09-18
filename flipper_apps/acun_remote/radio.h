@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include "sequence_core.h"
 
-#define RADIO_TX_REPEATS 6
 #define RADIO_TX_TIMEOUT_MS 3000
 
 typedef enum {
@@ -11,7 +10,7 @@ typedef enum {
     RadioEventPress, /* a press confirmed by RADIO_PRESS_CONFIRM_FRAMES identical frames; see *press */
     RadioEventOverflow, /* pulse queue overflowed, capture is unreliable */
     RadioEventTxDone,
-    RadioEventTxTimeout, /* RADIO_TX_TIMEOUT_MS without completion */
+    RadioEventTxTimeout, /* RADIO_TX_TIMEOUT_MS without frame progress */
 } RadioEvent;
 
 typedef struct Radio Radio;
@@ -19,7 +18,11 @@ typedef struct Radio Radio;
 Radio* radio_alloc(void);
 void radio_free(Radio* radio);
 void radio_rx_start(Radio* radio);
+/* Repeat one reserved code while held; the caller persists it first. */
 bool radio_tx_start(Radio* radio, const SeqProfile* profile);
+/* Finish the configured repeats, then report TxDone after hardware drains. */
+void radio_tx_release(Radio* radio);
+/* Immediate cancellation, including any buffered waveform. */
 void radio_stop(Radio* radio);
 bool radio_is_busy(const Radio* radio);
 /* Poll from the GUI thread every ~10 ms. Repeats of the last confirmed press are dropped. */

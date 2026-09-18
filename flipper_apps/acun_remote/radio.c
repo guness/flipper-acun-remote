@@ -1,4 +1,5 @@
 #include "radio.h"
+#include "tx_sequence.h"
 #include <furi.h>
 #include <furi_hal.h>
 #include <subghz/devices/devices.h>
@@ -34,16 +35,18 @@ struct Radio {
     volatile bool overflow;
     bool rx_on;
     bool tx_on;
-    uint32_t started; /* tick of RX start / last press / TX start, for timeouts */
+    volatile uint32_t tx_progress; /* Last frame queued by the async TX callback. */
     SeqDecoder decoder;
+    SeqTimingDecoder timing_decoder;
+    SeqFrame timing_frame;
+    uint8_t timing_repeats;
     SeqFrame candidate;
     uint8_t repeats;
     SeqFrame last_press;
     bool has_last;
     SeqProfile tx_profile;
-    size_t tx_position;
-    uint8_t tx_repeat;
-    bool tx_initial_gap;
+    AcunTxSequence tx_sequence;
+    volatile bool tx_held;
 };
 
 /* SubGhzWorker's own thread, already past its glitch filter: just queue it for
@@ -61,19 +64,12 @@ static void radio_overrun_callback(void* context) {
 
 static LevelDuration radio_tx_callback(void* context) {
     Radio* radio = context;
-    if(radio->tx_initial_gap) {
-        radio->tx_initial_gap = false;
-        return level_duration_make(false, radio->tx_profile.frame.gap);
-    }
-    if(radio->tx_repeat >= RADIO_TX_REPEATS) return level_duration_reset();
     bool level;
     uint32_t duration;
-    if(!seq_pulse(&radio->tx_profile.frame, radio->tx_position++, &level, &duration))
+    if(!acun_tx_sequence_next(
+           &radio->tx_sequence, &radio->tx_profile.frame, radio->tx_held, &level, &duration))
         return level_duration_reset();
-    if(radio->tx_position == 2u * (47u + radio->tx_profile.frame.suffix_count)) {
-        radio->tx_position = 0;
-        ++radio->tx_repeat;
-    }
+    if(radio->tx_sequence.position == 0) radio->tx_progress = furi_get_tick();
     return level_duration_make(level, duration);
 }
 
@@ -130,6 +126,8 @@ void radio_rx_start(Radio* radio) {
     radio->repeats = 0;
     radio->has_last = false;
     seq_decoder_reset(&radio->decoder);
+    seq_timing_reset(&radio->timing_decoder);
+    radio->timing_repeats = 0;
     radio_prepare(radio);
     radio->rx_on = true;
     subghz_devices_start_async_rx(radio->device, subghz_worker_rx_callback, radio->worker);
@@ -139,14 +137,17 @@ void radio_rx_start(Radio* radio) {
 bool radio_tx_start(Radio* radio, const SeqProfile* profile) {
     radio_stop(radio);
     radio->tx_profile = *profile;
-    radio->tx_position = 0;
-    radio->tx_repeat = 0;
-    radio->tx_initial_gap = true;
+    acun_tx_sequence_start(&radio->tx_sequence);
+    radio->tx_held = true;
     radio_prepare(radio);
-    radio->started = furi_get_tick();
+    radio->tx_progress = furi_get_tick();
     radio->tx_on = subghz_devices_start_async_tx(radio->device, radio_tx_callback, radio);
     if(!radio->tx_on) radio_stop(radio);
     return radio->tx_on;
+}
+
+void radio_tx_release(Radio* radio) {
+    radio->tx_held = false;
 }
 
 bool radio_is_busy(const Radio* radio) {
@@ -156,7 +157,8 @@ bool radio_is_busy(const Radio* radio) {
 RadioEvent radio_tick(Radio* radio, SeqFrame* press) {
     if(radio->tx_on) {
         if(subghz_devices_is_async_complete_tx(radio->device)) return RadioEventTxDone;
-        if(furi_get_tick() - radio->started > furi_ms_to_ticks(RADIO_TX_TIMEOUT_MS))
+        const uint32_t progress = radio->tx_progress;
+        if(furi_get_tick() - progress > furi_ms_to_ticks(RADIO_TX_TIMEOUT_MS))
             return RadioEventTxTimeout;
         return RadioEventNone;
     }
@@ -165,8 +167,24 @@ RadioEvent radio_tick(Radio* radio, SeqFrame* press) {
     Pulse pulse;
     size_t budget = TICK_BUDGET;
     while(budget-- && furi_message_queue_get(radio->pulses, &pulse, 0) == FuriStatusOk) {
+        SeqFrame timed;
+        if(seq_timing_decode(&radio->timing_decoder, pulse.level, pulse.duration, &timed)) {
+            if(radio->timing_repeats && seq_same_frame(&radio->timing_frame, &timed) &&
+               radio->timing_frame.suffix_count == timed.suffix_count &&
+               radio->timing_frame.suffix == timed.suffix) {
+                if(radio->timing_repeats < 2) ++radio->timing_repeats;
+            } else {
+                radio->timing_repeats = 1;
+            }
+            radio->timing_frame = timed;
+        }
         SeqFrame frame;
         if(!seq_decode(&radio->decoder, pulse.level, pulse.duration, &frame)) continue;
+        /* Two complete matching frames establish the playback shape. The
+         * immediate decoder still confirms identity, including fast repeats
+         * with no long gap; those retain its existing timing fallback. */
+        if(radio->timing_repeats >= 2 && seq_same_frame(&frame, &radio->timing_frame))
+            frame = radio->timing_frame;
         if(radio->has_last && seq_same_frame(&radio->last_press, &frame)) continue;
         if(radio->repeats && seq_same_frame(&radio->candidate, &frame)) {
             ++radio->repeats;

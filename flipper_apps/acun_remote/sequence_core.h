@@ -42,13 +42,31 @@ typedef struct {
     uint32_t last_gap; /* most recent real silence seen; reused as each frame's gap */
 } SeqDecoder;
 
+/* Optional whole-frame timing capture, independent of the immediate decoder.
+ * Only silence-delimited frames with 47..55 symbols are accepted. */
+typedef struct {
+    bool synchronized;
+    bool pending_low;
+    uint8_t count;
+    uint64_t bits;
+    uint32_t pair_sum;
+    uint32_t high;
+} SeqTimingDecoder;
+
+void seq_timing_reset(SeqTimingDecoder* decoder);
+bool seq_timing_decode(SeqTimingDecoder* decoder, bool level, uint32_t duration, SeqFrame* frame);
+
 uint16_t seq_permute(uint16_t word);
+/* Candidate grouping across up to eight adjacent button codes: identity and
+ * step must move together. This is a suggestion, not a unique device ID. */
+bool seq_remote_candidate(const SeqProfile* saved, const SeqProfile* learned);
 bool seq_same_button(const SeqFrame* a, const SeqFrame* b);
 bool seq_same_frame(const SeqFrame* a, const SeqFrame* b);
 bool seq_fit(const SeqFrame frames[SEQ_LEARN_COUNT], SeqProfile* result);
 void seq_advance(SeqProfile* profile);
 /* Move the profile to the accumulator implied by a heard press of the same
  * button. delta receives presses ahead (>0) or behind (<0) of the saved state.
+ * Also refreshes playback timing and trailing symbols from the heard frame.
  * Returns false if the frame is another button. sends is left unchanged. */
 bool seq_sync(SeqProfile* profile, const SeqFrame* heard, int32_t* delta);
 void seq_decoder_reset(SeqDecoder* decoder);

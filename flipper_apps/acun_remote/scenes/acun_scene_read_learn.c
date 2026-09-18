@@ -60,6 +60,7 @@ bool acun_scene_read_learn_on_event(void* context, SceneManagerEvent event) {
              * on the newest press instead of getting stuck. */
             if(app->captured_count == 1) {
                 app->captured[0] = *now;
+                acun_capture_notify(app);
                 read_learn_draw(app);
                 return true;
             }
@@ -85,6 +86,7 @@ bool acun_scene_read_learn_on_event(void* context, SceneManagerEvent event) {
             return true;
         }
         app->captured[app->captured_count++] = app->heard;
+        acun_capture_notify(app);
         app->learn_hint = false;
         if(app->captured_count < SEQ_LEARN_COUNT) {
             read_learn_draw(app);

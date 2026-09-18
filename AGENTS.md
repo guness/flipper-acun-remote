@@ -19,7 +19,7 @@ holds a host test suite for the C core and a build script.
   - `remote_store.c/.h` — SD layout (`<name>/<button>.<copy>.seq`), sorted
     in-memory index, journal write with read-back, create, delete, rename.
   - `radio.c/.h` — Sub-GHz RX capture with three-frame press confirmation
-    (listening has no timeout), TX drive with a 3 s watchdog; polled from the
+    (listening has no timeout), hold-to-send TX with a 3 s frame-progress watchdog; polled from the
     dispatcher tick.
   - `acun_remote.c`, `acun_remote_i.h` — app struct, view dispatcher, scene
     manager, shared view callbacks, result-popup helper.

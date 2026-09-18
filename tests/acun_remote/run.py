@@ -40,6 +40,12 @@ class Decoder(c.Structure):
                 ('last_gap', c.c_uint32)]
 
 
+class TimingDecoder(c.Structure):
+    _fields_ = [('synchronized', c.c_bool), ('pending_low', c.c_bool),
+                ('count', c.c_uint8), ('bits', c.c_uint64),
+                ('pair_sum', c.c_uint32), ('high', c.c_uint32)]
+
+
 TMP = tempfile.TemporaryDirectory(prefix='sequence-core-')
 LIBRARY = Path(TMP.name) / 'core.so'
 subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-shared', '-fPIC',
@@ -47,6 +53,8 @@ subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-shared', '-fP
                 str(ROOT / 'flipper_apps/acun_remote/remote_name.c'),
                 '-o', str(LIBRARY)], check=True)
 lib = c.CDLL(str(LIBRARY))
+lib.seq_remote_candidate.argtypes = [c.POINTER(Profile), c.POINTER(Profile)]
+lib.seq_remote_candidate.restype = c.c_bool
 lib.seq_fit.argtypes = [c.POINTER(Frame), c.POINTER(Profile)]
 lib.seq_fit.restype = c.c_bool
 lib.seq_same_frame.argtypes = [c.POINTER(Frame), c.POINTER(Frame)]
@@ -56,6 +64,8 @@ lib.seq_decode.argtypes = [c.POINTER(Decoder), c.c_bool, c.c_uint32, c.POINTER(F
 lib.seq_decode.restype = c.c_bool
 lib.seq_pulse.argtypes = [c.POINTER(Frame), c.c_size_t, c.POINTER(c.c_bool), c.POINTER(c.c_uint32)]
 lib.seq_pulse.restype = c.c_bool
+lib.seq_timing_decode.argtypes = [c.POINTER(TimingDecoder), c.c_bool, c.c_uint32, c.POINTER(Frame)]
+lib.seq_timing_decode.restype = c.c_bool
 lib.seq_pack.argtypes = [c.POINTER(Profile), c.POINTER(c.c_uint8)]
 lib.seq_unpack.argtypes = [c.POINTER(c.c_uint8), c.POINTER(Profile)]
 lib.seq_unpack.restype = c.c_bool
@@ -118,6 +128,82 @@ def sync(profile, word, **kwargs):
 
 
 class CoreTests(unittest.TestCase):
+    def test_remote_name_candidates(self):
+        def profile(identity, step):
+            p = Profile()
+            p.frame.prefix = identity >> 1
+            p.frame.word = (identity & 1) << 15
+            p.step = step
+            return p
+        groups = [[profile(0x03eaa188 + i, 0xd1c1 + i) for i in range(4)],
+                  [profile(0x03ea0729 + i, 0x3762 + i) for i in range(4)]]
+        for group_index, group in enumerate(groups):
+            for a in group:
+                for b in group:
+                    self.assertTrue(lib.seq_remote_candidate(c.byref(a), c.byref(b)))
+                for b in groups[1 - group_index]:
+                    self.assertFalse(lib.seq_remote_candidate(c.byref(a), c.byref(b)))
+        a = profile(0x10000, 0xfffe)
+        for identity, step_value, expected in ((0x10003, 1, True),
+                                               (0x10007, 5, True),
+                                               (0x10008, 6, False),
+                                               (0x10001, 7, False),
+                                               (0x10000, 0, False)):
+            b = profile(identity, step_value)
+            self.assertEqual(lib.seq_remote_candidate(c.byref(a), c.byref(b)), expected)
+            self.assertEqual(lib.seq_remote_candidate(c.byref(b), c.byref(a)), expected)
+
+
+    def test_complete_frame_timing(self):
+        # Model RX duty-cycle distortion: highs lose 60us, lows gain 60us.
+        # Both halves together must still yield the original 410us TE.
+        for tail_count in (0, 2, 8):
+            for suffix in (0, (1 << tail_count) - 1):
+                original = frame(0x6d99, suffix=suffix, count=tail_count)
+                original.gap = 9588
+                decoder, received = TimingDecoder(), Frame()
+                lib.seq_timing_decode(c.byref(decoder), False, 10000, c.byref(received))
+                for repeat in range(4):
+                    hits = 0
+                    for i in range(2 * (47 + tail_count)):
+                        level, duration = c.c_bool(), c.c_uint32()
+                        lib.seq_pulse(c.byref(original), i, c.byref(level), c.byref(duration))
+                        adjusted = duration.value
+                        if i != 2 * (47 + tail_count) - 1:
+                            adjusted += -60 if level.value else 60
+                        hits += lib.seq_timing_decode(c.byref(decoder), level, adjusted, c.byref(received))
+                    self.assertEqual(hits, 1)
+                    self.assertEqual((received.prefix, received.word, received.suffix,
+                                      received.suffix_count, received.te, received.gap),
+                                     (original.prefix, original.word, suffix, tail_count, 410, 9588))
+
+    def test_complete_frame_rejects_bad_boundaries(self):
+        for count in (46, 56):
+            decoder, received = TimingDecoder(), Frame()
+            lib.seq_timing_decode(c.byref(decoder), False, 10000, c.byref(received))
+            hits = 0
+            for i in range(count):
+                hits += lib.seq_timing_decode(c.byref(decoder), True, 410, c.byref(received))
+                hits += lib.seq_timing_decode(c.byref(decoder), False,
+                                              9588 if i == count - 1 else 1230, c.byref(received))
+            self.assertEqual(hits, 0)
+
+    def test_sync_refreshes_playback_shape(self):
+        ok, profile = fit(words('remote_a'), prefix=prefix('remote_a'))
+        self.assertTrue(ok)
+        heard = frame(profile.frame.word, prefix=profile.frame.prefix, suffix=0, count=2)
+        heard.te, heard.gap = 405, 9588
+        delta = c.c_int32()
+        self.assertTrue(lib.seq_sync(c.byref(profile), c.byref(heard), c.byref(delta)))
+        self.assertEqual(delta.value, 0)
+        self.assertEqual((profile.frame.suffix_count, profile.frame.te, profile.frame.gap),
+                         (2, 405, 9588))
+        raw = (c.c_uint8 * 64)()
+        lib.seq_pack(c.byref(profile), raw)
+        restored = Profile()
+        self.assertTrue(lib.seq_unpack(raw, c.byref(restored)))
+        self.assertEqual(restored.frame.suffix_count, 2)
+
     def test_fixture_layout(self):
         self.assertEqual(sorted(SETS), ['button_1', 'button_2', 'button_3', 'button_4',
                                         'remote_a', 'remote_b'])
@@ -378,4 +464,27 @@ class CoreTests(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    # Compile the unchanged send scene in a temporary mirror, substituting only
+    # its platform dependencies. No firmware checkout or SDK is needed.
+    with tempfile.TemporaryDirectory(prefix='acun-send-') as directory:
+        mirror = Path(directory)
+        (mirror / 'scenes').mkdir()
+        (mirror / 'acun_remote_i.h').write_bytes((HERE / 'send/acun_remote_i.h').read_bytes())
+        scene = mirror / 'scenes/acun_scene_send.c'
+        scene.write_bytes((ROOT / 'flipper_apps/acun_remote/scenes/acun_scene_send.c').read_bytes())
+        binary = mirror / 'test_send'
+        subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror',
+                        '-I' + str(ROOT / 'flipper_apps/acun_remote'),
+                        str(scene), str(HERE / 'send/test_send.c'),
+                        str(ROOT / 'flipper_apps/acun_remote/sequence_core.c'),
+                        '-o', str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
+    with tempfile.TemporaryDirectory(prefix='acun-tx-') as directory:
+        binary = Path(directory) / 'test_tx_sequence'
+        subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror',
+                        '-I' + str(ROOT / 'flipper_apps/acun_remote'),
+                        str(HERE / 'send/test_tx_sequence.c'),
+                        str(ROOT / 'flipper_apps/acun_remote/sequence_core.c'),
+                        '-o', str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
     unittest.main(verbosity=2)

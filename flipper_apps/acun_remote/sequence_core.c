@@ -7,6 +7,17 @@ uint16_t seq_permute(uint16_t word) {
     return word;
 }
 
+bool seq_remote_candidate(const SeqProfile* saved, const SeqProfile* learned) {
+    if(!saved->step || !learned->step) return false;
+    uint32_t a = (saved->frame.prefix << 1) | (saved->frame.word >> 15);
+    uint32_t b = (learned->frame.prefix << 1) | (learned->frame.word >> 15);
+    int64_t delta = (int64_t)b - a;
+    /* Observed sibling buttons advance the fixed code and step together.
+     * Do not use user-assigned button numbers or noisy timing as identity. */
+    return delta > -8 && delta < 8 &&
+           (uint16_t)(learned->step - saved->step) == (uint16_t)delta;
+}
+
 bool seq_same_button(const SeqFrame* a, const SeqFrame* b) {
     /* Trailing pulses can vary within one press. Keep them for playback,
      * but identify the button using only the prefix and fixed word flag. */
@@ -84,7 +95,7 @@ bool seq_sync(SeqProfile* profile, const SeqFrame* heard, int32_t* delta) {
     }
     if(!found) return false;
     profile->accumulator = best_acc;
-    profile->frame.word = heard->word;
+    profile->frame = *heard;
     *delta = best;
     return true;
 }
@@ -167,6 +178,61 @@ bool seq_decode(SeqDecoder* d, bool level, uint32_t duration, SeqFrame* frame) {
     bool valid = frame->te >= 250 && frame->te <= 550;
     seq_decoder_clear_run(d);
     return valid;
+}
+
+void seq_timing_reset(SeqTimingDecoder* decoder) {
+    memset(decoder, 0, sizeof(*decoder));
+}
+
+bool seq_timing_decode(SeqTimingDecoder* d, bool level, uint32_t duration, SeqFrame* frame) {
+    if(level) {
+        if(!d->synchronized) return false;
+        bool short_pulse = duration >= 200 && duration <= 650;
+        bool long_pulse = duration >= 800 && duration <= 1650;
+        if(d->pending_low || d->count == 55 || (!short_pulse && !long_pulse)) {
+            seq_timing_reset(d);
+            return false;
+        }
+        d->bits = (d->bits << 1) | long_pulse;
+        ++d->count;
+        d->high = duration;
+        d->pending_low = true;
+        return false;
+    }
+    if(duration >= SEQ_GAP_MIN_US) {
+        bool valid = d->synchronized && d->pending_low && d->count >= 47 &&
+                     duration <= 60000;
+        if(valid) {
+            /* Exclude the last pair: its low includes the inter-frame silence.
+             * Summing both halves avoids RX duty-cycle distortion biasing TE. */
+            uint32_t te = d->pair_sum / (4u * (d->count - 1u));
+            valid = te >= 250 && te <= 550;
+            if(valid) {
+                memset(frame, 0, sizeof(*frame));
+                frame->suffix_count = d->count - 47;
+                frame->suffix = d->bits & ((1u << frame->suffix_count) - 1u);
+                uint64_t core = d->bits >> frame->suffix_count;
+                frame->prefix = core >> 16;
+                frame->word = core & 0xFFFF;
+                frame->te = te;
+                frame->gap = duration;
+            }
+        }
+        seq_timing_reset(d);
+        d->synchronized = true;
+        return valid;
+    }
+    if(!d->synchronized || !d->pending_low) return false;
+    bool high_long = d->bits & 1;
+    bool valid_low = high_long ? duration >= 200 && duration <= 750 :
+                                 duration >= 800 && duration <= 1800;
+    if(!valid_low) {
+        seq_timing_reset(d);
+        return false;
+    }
+    d->pair_sum += d->high + duration;
+    d->pending_low = false;
+    return false;
 }
 
 bool seq_pulse(const SeqFrame* frame, size_t index, bool* level, uint32_t* duration) {

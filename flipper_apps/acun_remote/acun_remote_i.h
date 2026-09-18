@@ -47,6 +47,8 @@ typedef enum {
     AcunEventDialogRight,
     AcunEventTextDone,
     AcunEventNumberDone,
+    AcunEventSendPress,
+    AcunEventSendRelease,
 } AcunEvent;
 
 typedef enum {
@@ -80,6 +82,8 @@ typedef struct {
     SeqFrame heard; /* last confirmed press from the radio */
     SeqFrame captured[SEQ_LEARN_COUNT];
     uint8_t captured_count;
+    bool send_held; /* Physical OK hold, independent of trailing TX repeats. */
+    bool send_failed; /* Ignore queued input while a TX error popup is active. */
     bool learn_hint; /* a different button was heard while learning */
     SeqProfile pending; /* fitted, synced or advanced profile awaiting a write */
     int32_t sync_delta;
@@ -97,6 +101,9 @@ typedef struct {
     char text2[96]; /* popup or dialog body */
     uint32_t signal_tick; /* throttles the signal-bar redraw against the 10ms tick */
 } AcunApp;
+
+/* Beep and flash once for a capture accepted by a read scene. */
+void acun_capture_notify(AcunApp* app);
 
 /* Shared view callbacks; each forwards to the scene manager as a custom event. */
 void acun_submenu_callback(void* context, uint32_t index);

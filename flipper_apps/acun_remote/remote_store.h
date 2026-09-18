@@ -25,7 +25,9 @@ void remote_store_load(RemoteStore* store, Storage* storage);
 int remote_store_find(const RemoteStore* store, const SeqFrame* frame);
 int remote_store_find_named(const RemoteStore* store, const char* name, uint8_t button);
 uint8_t remote_store_free_button(const RemoteStore* store, const char* name);
-size_t remote_store_names(const RemoteStore* store, const char* names[], size_t max);
+/* NULL learned lists all names (rename); otherwise suggests compatible groups. */
+size_t remote_store_names(
+    const RemoteStore* store, const SeqProfile* learned, const char* names[], size_t max);
 void remote_store_label(const RemoteEntry* entry, char* out, size_t size);
 bool remote_store_write(Storage* storage, const char* name, uint8_t button, SeqProfile* profile);
 bool remote_store_create(Storage* storage, const char* name, uint8_t button, SeqProfile* profile);

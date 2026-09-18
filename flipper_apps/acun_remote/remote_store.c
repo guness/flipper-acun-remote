@@ -134,10 +134,13 @@ uint8_t remote_store_free_button(const RemoteStore* store, const char* name) {
     return 1;
 }
 
-size_t remote_store_names(const RemoteStore* store, const char* names[], size_t max) {
+size_t remote_store_names(
+    const RemoteStore* store, const SeqProfile* learned, const char* names[], size_t max) {
     size_t n = 0;
     for(size_t i = 0; i < store->count && n < max; ++i) {
-        if(n && strcasecmp(names[n - 1], store->entries[i].name) == 0) continue;
+        const RemoteEntry* entry = &store->entries[i];
+        if(learned && (entry->damaged || !seq_remote_candidate(&entry->profile, learned))) continue;
+        if(n && strcasecmp(names[n - 1], entry->name) == 0) continue;
         names[n++] = store->entries[i].name;
     }
     return n;

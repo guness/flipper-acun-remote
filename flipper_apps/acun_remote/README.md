@@ -25,14 +25,19 @@ the same way on two consecutive repeats of the same physical press.
 - **Known button.** If the press matches a saved entry, the app names it and
   says how far the physical remote is from the saved state, for example
   "Remote is 3 presses ahead". **Sync** moves the saved counter to the heard
-  press. Syncing to a remote that is behind is allowed, but the receiver may
+  press and refreshes its observed playback timing and trailing symbols.
+  Syncing to a remote that is behind is allowed, but the receiver may
   reject those codes and the dialog says so.
 - **New button.** Otherwise the app asks for the same button five times in a
   row. Release between presses and do not press other buttons; a different
   button is ignored with a hint. Three presses fit the counter model and two
-  validate it. Then pick an existing remote name or type a new one (1 to 12
+  validate it. Then choose a suggested remote name or **New remote...** (1 to 12
   letters, digits, spaces, `-` or `_`), choose a button number from 1 to 8,
-  and the entry is saved. If that name and number already exist you can
+  and the entry is saved. Suggestions require a saved button whose fixed code
+  and counter step differ together by fewer than eight positions, matching
+  the observed sibling-button pattern. Unrelated names are hidden; multiple
+  candidates remain selectable. This is not a unique-device guarantee.
+  Rename still lists all names. If that name and number already exist you can
   replace them.
 - Back leaves Read at any step. Listening has no timeout; a receive overflow,
   or five presses that do not fit, offer Retry or Cancel.
@@ -42,9 +47,20 @@ the same way on two consecutive repeats of the same physical press.
 One list of every learned button, sorted by remote name and then number, for
 example "Garage B1", "Garage B2", "Gate B1". Open an entry for:
 
-- **Send** transmits the next value as six repeats of one press. The counter is
-  written to the SD card and read back before the radio starts. Back stops the
-  radio; the index stays advanced.
+- **Send** opens a ready screen showing the current index and word in hex.
+  Hold the center (OK) button to transmit continuously. On release, the app
+  shows "Finishing" while the encoder finishes its six-repeat tail, then
+  returns to Ready. This matches the local Unleashed Sub-GHz hold/release
+  behavior: held frames do not consume the repeat budget, and release starts
+  counting it down at frame boundaries. Six is Acun's configured repeat count;
+  other firmware protocols can use different counts. The blue LED keeps
+  blinking until RF completes. Back or an error stops transmission immediately.
+  Pressing OK again during Finishing starts a new press with a new counter.
+  Each new press advances the counter once, then repeats that same code for
+  the entire hold. The counter is written to the SD card, synced and read back
+  before the radio starts. Back also stops transmission; a stopped or failed
+  send keeps its reserved index. The 3-second watchdog detects stalled frame
+  generation rather than limiting how long you can hold the button.
 - **Info** shows prefix, step, current word, index, send count, pulse count,
   pulse timing and gap.
 - **Rename** changes the remote name or button number without relearning.
@@ -73,8 +89,13 @@ for, so decoding no longer depends on one: the very next high pulse is read
 as the first bit of the next frame, with no silence required in between.
 Genuine silence between separate button presses still resynchronizes the
 decoder and is remembered for a learned button's own playback gap, but it no
-longer gates whether a frame is considered complete. A frame's later pulses
-are ignored, and every saved button now carries no trailing symbols. Highs
+longer gates whether a frame is considered complete. A parallel timing capture watches complete silence-delimited frames of 47–55
+symbols. After two complete frames agree on the word and trailing symbols,
+that observed suffix, gap and pulse timing enrich the confirmed press used
+for learning or Sync. TE is estimated from complete high/low pairs, excluding
+the final silence, so receive duty-cycle distortion does not bias it toward
+short high pulses. If no consistent complete frame is available, the immediate
+decoder's existing timing and zero-suffix fallback remain in use. Highs
 must belong to the short/long pulse clusters, lows must complement them, and
 mean TE must be 250–550 microseconds. Raw pulse edges shorter than 30
 microseconds are treated as RF ringing and merged into the pulse they
@@ -110,8 +131,15 @@ CRC corruption, and waveform generation with trailing pulses that no longer
 affect a saved button's identity. The live-parser test decodes every one of
 the 50 raw BinRAW blocks, back to back with any gap or none between them.
 BinRAW files lack the following gap, which this test explicitly restores.
+Complete-frame timing tests cover trailing symbols, receive duty-cycle
+distortion, invalid frame lengths and timing refresh on Sync.
 Sync is tested by moving a learned profile to every recorded press and to
-synthetic presses ahead of and behind it.
+synthetic presses ahead of and behind it. A host harness also runs the send
+scene with UI, radio and storage substitutes to check press/release handling,
+one reservation per hold, save-before-TX ordering, failure handling and exit.
+The TX sequence harness checks a 300-frame hold, a quick tap and release at
+every pulse position, including suffix-bearing frames.
+It does not validate physical button timing or RF transmission.
 
 Fixtures live under `tests/acun_remote/data`: one directory per recorded set
 (`remote_a`, `remote_b`, `button_1`–`button_4`) holding `press_1.sub` to

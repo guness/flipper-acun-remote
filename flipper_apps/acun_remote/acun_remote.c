@@ -1,6 +1,6 @@
 #include "acun_remote_i.h"
 
-/* One short beep per confirmed press - the same tone and duration the
+/* One short beep per accepted capture - the same tone and duration the
  * firmware's own Sub-GHz reader uses for a received packet. */
 static const NotificationSequence sequence_acun_capture_beep = {
     &message_note_c6,
@@ -8,6 +8,14 @@ static const NotificationSequence sequence_acun_capture_beep = {
     &message_sound_off,
     NULL,
 };
+
+/* Notify only after a scene accepts a capture. The RX duplicate filter is
+ * reset between Listening and Learn, so a held first press may be confirmed
+ * again there without being a new accepted learning sample. */
+void acun_capture_notify(AcunApp* app) {
+    notification_message(app->notifications, &sequence_blink_green_100);
+    notification_message(app->notifications, &sequence_acun_capture_beep);
+}
 
 void acun_submenu_callback(void* context, uint32_t index) {
     AcunApp* app = context;
@@ -112,13 +120,6 @@ static void acun_tick_event_callback(void* context) {
     switch(radio_tick(app->radio, &app->heard)) {
     case RadioEventPress:
         event = AcunEventPress;
-        /* A confirmed press (RADIO_PRESS_CONFIRM_FRAMES agreeing frames) is a
-         * meaningful, naturally rate-limited event - unlike every raw decoded
-         * frame, which during a held button can arrive every 20-40ms and
-         * would flood the notification service's 8-slot queue with a blink
-         * and a beep each. */
-        notification_message(app->notifications, &sequence_blink_green_100);
-        notification_message(app->notifications, &sequence_acun_capture_beep);
         break;
     case RadioEventOverflow:
         event = AcunEventRxOverflow;

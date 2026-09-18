@@ -42,6 +42,7 @@ bool acun_scene_read_listen_on_event(void* context, SceneManagerEvent event) {
     if(event.type != SceneManagerEventTypeCustom) return false;
     switch(event.event) {
     case AcunEventPress: {
+        acun_capture_notify(app);
         int found = remote_store_find(&app->store, &app->heard);
         if(found < 0) {
             app->captured[0] = app->heard;
