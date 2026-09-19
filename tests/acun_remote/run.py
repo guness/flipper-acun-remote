@@ -46,13 +46,28 @@ class TimingDecoder(c.Structure):
                 ('pair_sum', c.c_uint32), ('high', c.c_uint32)]
 
 
+class Recording(c.Structure):
+    _fields_ = [('decoder', TimingDecoder), ('candidate', Frame), ('result', Frame),
+                ('te', c.c_uint32), ('bit_count', c.c_uint32),
+                ('repeats', c.c_uint8), ('protocol', c.c_uint8),
+                ('filetype', c.c_bool), ('version', c.c_bool), ('frequency', c.c_bool),
+                ('preset', c.c_bool), ('failed', c.c_bool), ('found', c.c_bool),
+                ('data_seen', c.c_bool)]
+
+
 TMP = tempfile.TemporaryDirectory(prefix='sequence-core-')
 LIBRARY = Path(TMP.name) / 'core.so'
 subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-shared', '-fPIC',
                 '-O2', str(ROOT / 'flipper_apps/acun_remote/sequence_core.c'),
                 str(ROOT / 'flipper_apps/acun_remote/remote_name.c'),
+                str(ROOT / 'flipper_apps/acun_remote/recording.c'),
                 '-o', str(LIBRARY)], check=True)
 lib = c.CDLL(str(LIBRARY))
+lib.acun_recording_init.argtypes = [c.POINTER(Recording)]
+lib.acun_recording_line.argtypes = [c.POINTER(Recording), c.c_char_p]
+lib.acun_recording_line.restype = c.c_bool
+lib.acun_recording_finish.argtypes = [c.POINTER(Recording), c.POINTER(Frame)]
+lib.acun_recording_finish.restype = c.c_bool
 lib.seq_remote_candidate.argtypes = [c.POINTER(Profile), c.POINTER(Profile)]
 lib.seq_remote_candidate.restype = c.c_bool
 lib.seq_fit.argtypes = [c.POINTER(Frame), c.POINTER(Profile)]
@@ -128,6 +143,101 @@ def sync(profile, word, **kwargs):
 
 
 class CoreTests(unittest.TestCase):
+    def parse_recording(self, text):
+        recording, out = Recording(), Frame()
+        lib.acun_recording_init(c.byref(recording))
+        for line in text.splitlines():
+            if not lib.acun_recording_line(c.byref(recording), line.encode()):
+                return False, out
+        return lib.acun_recording_finish(c.byref(recording), c.byref(out)), out
+
+    def test_file_sync_binraw(self):
+        for path, word in zip(recordings('remote_a'), words('remote_a')):
+            ok, out = self.parse_recording(path.read_text())
+            self.assertTrue(ok, path)
+            self.assertEqual((out.prefix, out.word, out.suffix_count), (prefix('remote_a'), word, 2))
+        text = recordings('remote_a')[0].read_text()
+        for bad in (text.replace('433920000', '315000000'),
+                    text.replace('Version: 1', 'Version: 2'),
+                    text.replace('Protocol: BinRAW', 'Protocol: Princeton'),
+                    text.replace('TE: 411', 'TE: 0'),
+                    text.replace('Data_RAW:', 'Data_RAW: XX'),
+                    text + '\nBit_RAW: 217\n',
+                    text.replace('Bit_RAW: 217', 'Bit_RAW: 5000')):
+            self.assertFalse(self.parse_recording(bad)[0])
+
+    def test_file_sync_raw_confirmation_and_ambiguity(self):
+        header = ('Filetype: Flipper SubGhz RAW File\nVersion: 1\n'
+                  'Frequency: 433920000\nPreset: FuriHalSubGhzPresetOok270Async\nProtocol: RAW\n')
+        def waveform(word, repeats):
+            f = frame(word, suffix=2, count=2)
+            parts = [-9588]
+            for _ in range(repeats):
+                for i in range(98):
+                    level, duration = c.c_bool(), c.c_uint32()
+                    lib.seq_pulse(c.byref(f), i, c.byref(level), c.byref(duration))
+                    parts.append(duration.value if level.value else -duration.value)
+            return 'RAW_Data: ' + ' '.join(map(str, parts)) + '\n'
+        ok, out = self.parse_recording(header + waveform(0xa0e7, 3))
+        self.assertTrue(ok)
+        self.assertEqual(out.word, 0xa0e7)
+        self.assertFalse(self.parse_recording(header + waveform(0xa0e7, 2))[0])
+        self.assertFalse(self.parse_recording(header + waveform(0xa0e7, 3) + waveform(0x9d79, 3))[0])
+        self.assertFalse(self.parse_recording(header + 'RAW_Data: -99999999999999999999')[0])
+
+
+    def test_binraw_trailer_and_playback(self):
+        # BinRAW stores valid bits right-aligned; padding is at the front.
+        checked = 0
+        for name in SETS:
+            for path in recordings(name):
+                for data, n, te in binraw_blocks(path):
+                    samples = ''.join(f'{b:08b}' for b in data)[-n:]
+                    runs = [(v == '1', len(list(g)) * te) for v, g in groupby(samples)]
+                    highs = [duration for level, duration in runs if level]
+                    if len(highs) != 49:
+                        continue
+                    checked += 1
+                    original_gap = runs[0][1]
+                    if runs[-1][0]:
+                        runs.append((False, original_gap))
+                    else:
+                        runs[-1] = (False, original_gap)
+                    decoder, result = TimingDecoder(), Frame()
+                    hits = sum(lib.seq_timing_decode(c.byref(decoder), level, duration,
+                                                    c.byref(result)) for level, duration in runs)
+                    self.assertEqual(hits, 1, path)
+                    self.assertEqual(result.suffix_count, 2)
+                    self.assertEqual(result.suffix, ((highs[-2] > 1.5 * te) << 1) |
+                                     (highs[-1] > 1.5 * te))
+                    level, duration = c.c_bool(), c.c_uint32()
+                    lib.seq_pulse(c.byref(result), 95, c.byref(level), c.byref(duration))
+                    self.assertFalse(level.value)
+                    self.assertEqual(duration.value, (2 if result.suffix & 2 else 4) * result.te)
+
+
+        self.assertGreaterEqual(checked, 30)
+
+    def test_immediate_decoder_timing_uses_both_pulse_halves(self):
+        for word in (0x81ab, 0x81aa):
+            for skew in (-60, 0, 60):
+                original = frame(word)
+                decoder, received = Decoder(), Frame()
+                lib.seq_decode(c.byref(decoder), False, 9588, c.byref(received))
+                hits = 0
+                for i in range(94):
+                    level, duration = c.c_bool(), c.c_uint32()
+                    lib.seq_pulse(c.byref(original), i, c.byref(level), c.byref(duration))
+                    adjusted = duration.value + (skew if level.value else -skew)
+                    if i == 93:
+                        adjusted = 9588
+                    hits += lib.seq_decode(c.byref(decoder), level, adjusted, c.byref(received))
+                self.assertEqual(hits, 1)
+                self.assertEqual(received.word, word)
+                self.assertLessEqual(abs(received.te - original.te), 1)
+                self.assertEqual(received.gap, 9588)
+
+
     def test_remote_name_candidates(self):
         def profile(identity, step):
             p = Profile()
@@ -436,7 +546,7 @@ class CoreTests(unittest.TestCase):
                 first = None
                 for data, n, te in binraw_blocks(path):
                     blocks += 1
-                    samples = ''.join(f'{b:08b}' for b in data)[:n]
+                    samples = ''.join(f'{b:08b}' for b in data)[-n:]
                     runs = [(v == '1', len(list(g)) * te) for v, g in groupby(samples)]
                     if runs[-1][0]:
                         runs.append((False, GAP))

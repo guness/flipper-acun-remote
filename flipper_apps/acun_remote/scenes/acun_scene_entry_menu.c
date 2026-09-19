@@ -5,6 +5,7 @@ enum {
     EntryInfo,
     EntryRename,
     EntryDelete,
+    EntryFileSync,
 };
 
 void acun_scene_entry_menu_on_enter(void* context) {
@@ -15,6 +16,7 @@ void acun_scene_entry_menu_on_enter(void* context) {
     if(!entry->damaged) {
         submenu_add_item(app->submenu, "Send", EntrySend, acun_submenu_callback, app);
         submenu_add_item(app->submenu, "Info", EntryInfo, acun_submenu_callback, app);
+        submenu_add_item(app->submenu, "Sync from file", EntryFileSync, acun_submenu_callback, app);
         submenu_add_item(app->submenu, "Rename", EntryRename, acun_submenu_callback, app);
     }
     submenu_add_item(app->submenu, "Delete", EntryDelete, acun_submenu_callback, app);
@@ -30,6 +32,9 @@ bool acun_scene_entry_menu_on_event(void* context, SceneManagerEvent event) {
     switch(event.event) {
     case EntrySend:
         scene_manager_next_scene(app->scene_manager, AcunSceneSend);
+        return true;
+    case EntryFileSync:
+        scene_manager_next_scene(app->scene_manager, AcunSceneFileSync);
         return true;
     case EntryInfo:
         scene_manager_next_scene(app->scene_manager, AcunSceneInfo);

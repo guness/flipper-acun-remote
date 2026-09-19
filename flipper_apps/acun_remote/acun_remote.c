@@ -168,6 +168,10 @@ static AcunApp* acun_alloc(void) {
     app->popup = popup_alloc();
     view_dispatcher_add_view(app->view_dispatcher, AcunViewPopup, popup_get_view(app->popup));
 
+    app->file_path = furi_string_alloc_set("/ext/subghz");
+    app->file_browser = file_browser_alloc(app->file_path);
+    view_dispatcher_add_view(
+        app->view_dispatcher, AcunViewFileBrowser, file_browser_get_view(app->file_browser));
     app->radio = radio_alloc();
     remote_store_load(&app->store, app->storage);
     return app;
@@ -175,6 +179,10 @@ static AcunApp* acun_alloc(void) {
 
 static void acun_free(AcunApp* app) {
     radio_free(app->radio);
+    view_dispatcher_remove_view(app->view_dispatcher, AcunViewFileBrowser);
+    if(app->file_browser_running) file_browser_stop(app->file_browser);
+    file_browser_free(app->file_browser);
+    furi_string_free(app->file_path);
     view_dispatcher_remove_view(app->view_dispatcher, AcunViewSubmenu);
     submenu_free(app->submenu);
     view_dispatcher_remove_view(app->view_dispatcher, AcunViewDialog);

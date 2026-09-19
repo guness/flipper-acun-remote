@@ -131,7 +131,7 @@ bool seq_decode(SeqDecoder* d, bool level, uint32_t duration, SeqFrame* frame) {
             return false;
         }
         d->bits = (d->bits << 1) | long_pulse;
-        d->units_sum += duration / (long_pulse ? 3u : 1u);
+        d->units_sum += duration;
         ++d->count;
         d->pending_low = true;
         return false;
@@ -166,14 +166,20 @@ bool seq_decode(SeqDecoder* d, bool level, uint32_t duration, SeqFrame* frame) {
         return false;
     }
     d->pending_low = false;
-    if(!last_bit) return false;
+    if(!last_bit) {
+        d->units_sum += duration;
+        return false;
+    }
     if(duration >= SEQ_GAP_MIN_US) d->last_gap = duration > 60000 ? 60000 : duration;
     /* 47 bits complete: emit immediately and start the next frame right
      * away, with no gap required before its first high pulse. */
     memset(frame, 0, sizeof(*frame));
     frame->prefix = d->bits >> 16;
     frame->word = d->bits & 0xFFFF;
-    frame->te = d->units_sum / d->count;
+    /* Sum complete high/low pairs, plus the final high. Exclude the final
+     * low because it can include a gap. RX can shorten highs and lengthen
+     * lows; using only highs biases the saved playback timing downward. */
+    frame->te = d->units_sum / (4u * (d->count - 1u) + (high_long ? 3u : 1u));
     frame->gap = d->last_gap ? d->last_gap : SEQ_GAP_DEFAULT_US;
     bool valid = frame->te >= 250 && frame->te <= 550;
     seq_decoder_clear_run(d);
@@ -205,7 +211,8 @@ bool seq_timing_decode(SeqTimingDecoder* d, bool level, uint32_t duration, SeqFr
         if(valid) {
             /* Exclude the last pair: its low includes the inter-frame silence.
              * Summing both halves avoids RX duty-cycle distortion biasing TE. */
-            uint32_t te = d->pair_sum / (4u * (d->count - 1u));
+            /* The observed two-symbol trailer extends its first low by one TE. */
+            uint32_t te = d->pair_sum / (4u * (d->count - 1u) + (d->count == 49 ? 1u : 0u));
             valid = te >= 250 && te <= 550;
             if(valid) {
                 memset(frame, 0, sizeof(*frame));
@@ -224,8 +231,10 @@ bool seq_timing_decode(SeqTimingDecoder* d, bool level, uint32_t duration, SeqFr
     }
     if(!d->synchronized || !d->pending_low) return false;
     bool high_long = d->bits & 1;
-    bool valid_low = high_long ? duration >= 200 && duration <= 750 :
-                                 duration >= 800 && duration <= 1800;
+    /* Symbol 48 is the first trailer symbol, whose low can be two TE
+     * after a long high (instead of the core's one TE). */
+    bool valid_low = high_long ? duration >= 200 && duration <= (d->count == 48 ? 1400u : 750u) :
+                                 duration >= 800 && duration <= (d->count == 48 ? 2400u : 1800u);
     if(!valid_low) {
         seq_timing_reset(d);
         return false;
@@ -243,6 +252,9 @@ bool seq_pulse(const SeqFrame* frame, size_t index, bool* level, uint32_t* durat
     bool bit = (bits >> (count - 1u - index / 2u)) & 1;
     *level = !(index & 1);
     *duration = frame->te * (*level ? (bit ? 3u : 1u) : (bit ? 1u : 3u));
+    /* Both observed 49-symbol remote families have a five-TE first
+     * trailer pair, followed by the stop symbol and inter-frame low. */
+    if(frame->suffix_count == 2 && index == 95) *duration += frame->te;
     if(index == 2u * count - 1u) *duration = frame->gap;
     return true;
 }

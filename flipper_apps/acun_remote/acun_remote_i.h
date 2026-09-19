@@ -10,6 +10,7 @@
 #include <gui/modules/number_input.h>
 #include <gui/modules/widget.h>
 #include <gui/modules/popup.h>
+#include <gui/modules/file_browser.h>
 #include <storage/storage.h>
 #include <notification/notification_messages.h>
 #include <stdio.h>
@@ -32,6 +33,7 @@ typedef enum {
     AcunViewNumberInput,
     AcunViewWidget,
     AcunViewPopup,
+    AcunViewFileBrowser,
 } AcunView;
 
 /* Custom events. Submenu item indexes (0..REMOTE_STORE_MAX) are sent as-is,
@@ -49,6 +51,7 @@ typedef enum {
     AcunEventNumberDone,
     AcunEventSendPress,
     AcunEventSendRelease,
+    AcunEventFileSelected,
 } AcunEvent;
 
 typedef enum {
@@ -75,6 +78,9 @@ typedef struct {
     NumberInput* number_input;
     Widget* widget;
     Popup* popup;
+    FileBrowser* file_browser;
+    FuriString* file_path;
+    bool file_browser_running;
     NotificationApp* notifications;
     Radio* radio;
     RemoteStore store;
@@ -82,6 +88,7 @@ typedef struct {
     SeqFrame heard; /* last confirmed press from the radio */
     SeqFrame captured[SEQ_LEARN_COUNT];
     uint8_t captured_count;
+    bool file_sync_ready;
     bool send_held; /* Physical OK hold, independent of trailing TX repeats. */
     bool send_failed; /* Ignore queued input while a TX error popup is active. */
     bool learn_hint; /* a different button was heard while learning */

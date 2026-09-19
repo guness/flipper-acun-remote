@@ -3,20 +3,25 @@
 void acun_scene_info_on_enter(void* context) {
     AcunApp* app = context;
     const SeqProfile* p = &app->store.entries[app->selected].profile;
-    char line[40];
+    char body[256];
+    snprintf(
+        body, sizeof(body),
+        "Send attempts: %lu\n"
+        "Counter: %04X\n"
+        "Step: %04X\n"
+        "Word: %04X\n"
+        "Prefix: %08lX\n"
+        "Pulse (TE): %u us\n"
+        "Gap: %lu.%03lu ms\n"
+        "Tail: %u bits / %02X",
+        (unsigned long)p->sends, p->accumulator, p->step, p->frame.word,
+        (unsigned long)p->frame.prefix, p->frame.te,
+        (unsigned long)(p->frame.gap / 1000), (unsigned long)(p->frame.gap % 1000),
+        p->frame.suffix_count, p->frame.suffix);
     widget_reset(app->widget);
     widget_add_string_element(
         app->widget, 64, 1, AlignCenter, AlignTop, FontPrimary, acun_selected_label(app));
-    snprintf(line, sizeof(line), "Prefix %08lX", (unsigned long)p->frame.prefix);
-    widget_add_string_element(app->widget, 2, 14, AlignLeft, AlignTop, FontSecondary, line);
-    snprintf(line, sizeof(line), "Step %04X  Word %04X", p->step, p->frame.word);
-    widget_add_string_element(app->widget, 2, 24, AlignLeft, AlignTop, FontSecondary, line);
-    snprintf(line, sizeof(line), "Index %04X  Sends %lu", p->accumulator, (unsigned long)p->sends);
-    widget_add_string_element(app->widget, 2, 34, AlignLeft, AlignTop, FontSecondary, line);
-    snprintf(line, sizeof(line), "%u pulses  TE %u us", 47u + p->frame.suffix_count, p->frame.te);
-    widget_add_string_element(app->widget, 2, 44, AlignLeft, AlignTop, FontSecondary, line);
-    snprintf(line, sizeof(line), "Gap %lu us", (unsigned long)p->frame.gap);
-    widget_add_string_element(app->widget, 2, 54, AlignLeft, AlignTop, FontSecondary, line);
+    widget_add_text_scroll_element(app->widget, 0, 14, 128, 50, body);
     view_dispatcher_switch_to_view(app->view_dispatcher, AcunViewWidget);
 }
 

@@ -15,9 +15,10 @@ button-release timing was not recorded independently.
 
 The complete-frame timing decoder yields a median TE of 406 microseconds.
 The high pulses alone underestimate TE because the captured lows are longer
-than ideal PWM complements. Pair sums give a better timing estimate. One
-trailing pair is also longer than an ideal four-TE symbol; the app's uniform
-PWM encoder remains an approximation, not a pulse-for-pulse reproduction.
+than ideal PWM complements. Pair sums give a better timing estimate. The first trailer pair is longer than an ordinary four-TE symbol. The
+2026-09-19 DH autosave check confirmed this five-TE pair in both trailer
+variants, and the encoder now includes the additional TE in its low pulse.
+Playback remains regenerated PWM, not a pulse-for-pulse capture replay.
 
 The new timing path finds the repeated 49-symbol shape before the first
 three-frame press confirmation. A damaged interval near the end produces a

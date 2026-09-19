@@ -38,7 +38,7 @@ typedef struct {
     bool pending_low;
     uint8_t count;
     uint64_t bits;
-    uint32_t units_sum;
+    uint32_t units_sum; /* Sum of pulse durations, excluding the final low. */
     uint32_t last_gap; /* most recent real silence seen; reused as each frame's gap */
 } SeqDecoder;
 

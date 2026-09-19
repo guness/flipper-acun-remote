@@ -61,8 +61,20 @@ example "Garage B1", "Garage B2", "Gate B1". Open an entry for:
   before the radio starts. Back also stops transmission; a stopped or failed
   send keeps its reserved index. The 3-second watchdog detects stalled frame
   generation rather than limiting how long you can hold the button.
-- **Info** shows prefix, step, current word, index, send count, pulse count,
-  pulse timing and gap.
+- **Info** shows only this button's send attempts, counter, step, word,
+  prefix, TE, gap and saved tail. Scroll with Up/Down. Shared format and
+  operating information is in **About**.
+- **Sync from file** opens the SD browser at `/ext/subghz`. Select a RAW or
+  BinRAW `.sub` recording of the same button at 433.92 MHz / AM270. The app
+  checks the file and previews its counter offset before any write. **Sync**
+  uses the recorded counter and timing; **Cancel** changes nothing. Neither
+  option transmits. Older recordings can put the saved counter behind the
+  gate, so prefer Read for a live press when the file is old.
+  Files must represent one press: conflicting confirmed codes are rejected.
+  RAW needs three matching complete frames; BinRAW needs a complete block.
+  Files are limited to 1 MiB, lines to 4095 characters and BinRAW blocks to
+  4096 bits. Unsupported formats or recordings without a usable frame are
+  rejected. Successful updates use the existing synced/read-back journal.
 - **Rename** changes the remote name or button number without relearning.
 - **Delete** removes the entry after a confirmation.
 
@@ -95,12 +107,16 @@ that observed suffix, gap and pulse timing enrich the confirmed press used
 for learning or Sync. TE is estimated from complete high/low pairs, excluding
 the final silence, so receive duty-cycle distortion does not bias it toward
 short high pulses. If no consistent complete frame is available, the immediate
-decoder's existing timing and zero-suffix fallback remain in use. Highs
+decoder's zero-suffix fallback remains in use. Its TE estimate also uses
+high/low pair sums, excluding the final low, rather than averaging only highs. Highs
 must belong to the short/long pulse clusters, lows must complement them, and
 mean TE must be 250–550 microseconds. Raw pulse edges shorter than 30
 microseconds are treated as RF ringing and merged into the pulse they
 interrupted, the same filter the firmware's own Sub-GHz reader applies.
-Transmission regenerates PWM with the learned TE and gap.
+Transmission regenerates PWM with the learned TE and gap. For two-symbol
+trailers, the first low includes an extra TE, matching the observed five-TE
+trailer pair. The complete-frame timing decoder accepts that extended low and
+accounts for it when estimating TE.
 
 This avoids assuming that the whole protocol is exactly 47 bits, while no
 longer assuming repeats are spaced apart either. Different buttons, missing
@@ -148,8 +164,10 @@ words. The tests read nothing outside the repository.
 
 ## Hardware validation still required
 
-The FAP builds and passes its firmware API/import check. Radio reception on the
-device, generated RF timing and receiver acceptance have **not** been tested.
+The FAP builds and passes its firmware API/import check. The user reported
+EC B1 operating its gate on 2026-09-19, while DH B1 did not. This is partial
+hardware feedback, not validation of all profiles or generated RF timing.
+`hardware_tested` remains false pending broader reception/transmission checks.
 The UI reports transmission completion, not confirmation that the receiver acted.
 
 Original-remote use can advance the receiver beyond the saved state; relearn the
