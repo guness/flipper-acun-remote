@@ -92,6 +92,13 @@ generation wins. Files from the earlier fixed-slot version are ignored. Up to
 32 entries are listed. Keep the SD card inserted while using the app. The
 frequency stays subject to the firmware's normal transmission-region checks.
 
+Transmission uses Flipper's native `SubGhzTransmitter` framework with an
+app-local Acun protocol registry. The Acun encoder supplies the learned pulse,
+gap and tail through the native transmitter's yield callback. Its typed start
+method accepts the already-reserved frame; the encoder never advances counters.
+These framework APIs are shared with official firmware, though this shipped
+build is checked against the local Unleashed SDK.
+
 ## Framing
 
 Live decoding reads the first 47 symbols as the prefix/word layout and emits
@@ -155,6 +162,9 @@ scene with UI, radio and storage substitutes to check press/release handling,
 one reservation per hold, save-before-TX ordering, failure handling and exit.
 The TX sequence harness checks a 300-frame hold, a quick tap and release at
 every pulse position, including suffix-bearing frames.
+The native encoder adapter harness checks pulse output, frame-progress updates,
+release, cancellation and restart through the protocol callbacks with host
+substitutes for firmware types.
 It does not validate physical button timing or RF transmission.
 
 Fixtures live under `tests/acun_remote/data`: one directory per recorded set

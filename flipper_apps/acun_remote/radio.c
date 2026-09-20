@@ -1,8 +1,9 @@
 #include "radio.h"
-#include "tx_sequence.h"
+#include "tx_encoder.h"
 #include <furi.h>
 #include <furi_hal.h>
 #include <subghz/devices/devices.h>
+#include <subghz/transmitter.h>
 #include <subghz/devices/cc1101_int/cc1101_int_interconnect.h>
 #include <lib/subghz/subghz_worker.h>
 #include <stdlib.h>
@@ -35,7 +36,9 @@ struct Radio {
     volatile bool overflow;
     bool rx_on;
     bool tx_on;
-    volatile uint32_t tx_progress; /* Last frame queued by the async TX callback. */
+    SubGhzEnvironment* environment;
+    SubGhzTransmitter* transmitter;
+    AcunTxEncoder* encoder;
     SeqDecoder decoder;
     SeqTimingDecoder timing_decoder;
     SeqFrame timing_frame;
@@ -44,9 +47,6 @@ struct Radio {
     uint8_t repeats;
     SeqFrame last_press;
     bool has_last;
-    SeqProfile tx_profile;
-    AcunTxSequence tx_sequence;
-    volatile bool tx_held;
 };
 
 /* SubGhzWorker's own thread, already past its glitch filter: just queue it for
@@ -62,17 +62,6 @@ static void radio_overrun_callback(void* context) {
     radio->overflow = true;
 }
 
-static LevelDuration radio_tx_callback(void* context) {
-    Radio* radio = context;
-    bool level;
-    uint32_t duration;
-    if(!acun_tx_sequence_next(
-           &radio->tx_sequence, &radio->tx_profile.frame, radio->tx_held, &level, &duration))
-        return level_duration_reset();
-    if(radio->tx_sequence.position == 0) radio->tx_progress = furi_get_tick();
-    return level_duration_make(level, duration);
-}
-
 static void radio_prepare(Radio* radio) {
     subghz_devices_reset(radio->device);
     subghz_devices_idle(radio->device);
@@ -83,6 +72,11 @@ static void radio_prepare(Radio* radio) {
 Radio* radio_alloc(void) {
     Radio* radio = malloc(sizeof(Radio));
     memset(radio, 0, sizeof(*radio));
+    radio->environment = subghz_environment_alloc();
+    subghz_environment_set_protocol_registry(radio->environment, &acun_tx_registry);
+    radio->transmitter = subghz_transmitter_alloc_init(radio->environment, ACUN_PROTOCOL_NAME);
+    furi_check(radio->transmitter);
+    radio->encoder = (AcunTxEncoder*)subghz_transmitter_get_protocol_instance(radio->transmitter);
     radio->pulses = furi_message_queue_alloc(PULSE_QUEUE_DEPTH, sizeof(Pulse));
     radio->worker = subghz_worker_alloc();
     subghz_worker_set_context(radio->worker, radio);
@@ -98,6 +92,8 @@ Radio* radio_alloc(void) {
 
 void radio_free(Radio* radio) {
     radio_stop(radio);
+    subghz_transmitter_free(radio->transmitter);
+    subghz_environment_free(radio->environment);
     subghz_devices_end(radio->device);
     subghz_devices_deinit();
     subghz_worker_free(radio->worker);
@@ -115,6 +111,8 @@ void radio_stop(Radio* radio) {
         subghz_devices_stop_async_tx(radio->device);
         radio->tx_on = false;
     }
+    /* Stop callbacks before mutating or freeing their encoder state. */
+    subghz_transmitter_stop(radio->transmitter);
     subghz_devices_idle(radio->device);
     subghz_devices_sleep(radio->device);
 }
@@ -136,18 +134,16 @@ void radio_rx_start(Radio* radio) {
 
 bool radio_tx_start(Radio* radio, const SeqProfile* profile) {
     radio_stop(radio);
-    radio->tx_profile = *profile;
-    acun_tx_sequence_start(&radio->tx_sequence);
-    radio->tx_held = true;
+    acun_tx_encoder_start(radio->encoder, &profile->frame);
     radio_prepare(radio);
-    radio->tx_progress = furi_get_tick();
-    radio->tx_on = subghz_devices_start_async_tx(radio->device, radio_tx_callback, radio);
+    radio->tx_on = subghz_devices_start_async_tx(
+        radio->device, subghz_transmitter_yield, radio->transmitter);
     if(!radio->tx_on) radio_stop(radio);
     return radio->tx_on;
 }
 
 void radio_tx_release(Radio* radio) {
-    radio->tx_held = false;
+    acun_tx_encoder_release(radio->encoder);
 }
 
 bool radio_is_busy(const Radio* radio) {
@@ -157,7 +153,7 @@ bool radio_is_busy(const Radio* radio) {
 RadioEvent radio_tick(Radio* radio, SeqFrame* press) {
     if(radio->tx_on) {
         if(subghz_devices_is_async_complete_tx(radio->device)) return RadioEventTxDone;
-        const uint32_t progress = radio->tx_progress;
+        const uint32_t progress = acun_tx_encoder_progress(radio->encoder);
         if(furi_get_tick() - progress > furi_ms_to_ticks(RADIO_TX_TIMEOUT_MS))
             return RadioEventTxTimeout;
         return RadioEventNone;

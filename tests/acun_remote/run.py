@@ -597,4 +597,14 @@ if __name__ == '__main__':
                         str(ROOT / 'flipper_apps/acun_remote/sequence_core.c'),
                         '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
+    with tempfile.TemporaryDirectory(prefix='acun-encoder-') as directory:
+        binary = Path(directory) / 'test_encoder'
+        subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror',
+                        '-I' + str(HERE / 'encoder'),
+                        '-I' + str(ROOT / 'flipper_apps/acun_remote'),
+                        str(HERE / 'encoder/test_encoder.c'),
+                        str(ROOT / 'flipper_apps/acun_remote/tx_encoder.c'),
+                        str(ROOT / 'flipper_apps/acun_remote/sequence_core.c'),
+                        '-o', str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
     unittest.main(verbosity=2)
