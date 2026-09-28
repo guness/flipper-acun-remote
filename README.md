@@ -7,3 +7,7 @@ See [application documentation](flipper_apps/acun_remote/README.md) for installa
 Tests are self-contained: five recorded presses per remote and button live under `tests/acun_remote/data`.
 
 Run tests with `python3 tests/acun_remote/run.py`.
+
+## License
+
+Copyright (C) 2026 guness. Licensed under the GNU General Public License v3.0; see [LICENSE](LICENSE).
