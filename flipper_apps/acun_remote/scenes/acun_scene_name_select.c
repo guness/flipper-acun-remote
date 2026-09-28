@@ -3,7 +3,10 @@
 void acun_scene_name_select_on_enter(void* context) {
     AcunApp* app = context;
     app->names_count = remote_store_names(
-        &app->store, app->flow == AcunFlowLearn ? &app->pending : NULL, app->names, REMOTE_STORE_MAX);
+        &app->store,
+        app->flow == AcunFlowLearn ? &app->pending : NULL,
+        app->names,
+        REMOTE_STORE_MAX);
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, app->flow == AcunFlowLearn ? "Suggested remote" : "Remote");
     for(size_t i = 0; i < app->names_count; ++i) {
@@ -11,8 +14,7 @@ void acun_scene_name_select_on_enter(void* context) {
         if(app->flow == AcunFlowRename && strcasecmp(app->names[i], app->name) == 0)
             submenu_set_selected_item(app->submenu, i);
     }
-    submenu_add_item(
-        app->submenu, "New remote...", app->names_count, acun_submenu_callback, app);
+    submenu_add_item(app->submenu, "New remote...", app->names_count, acun_submenu_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, AcunViewSubmenu);
 }
 

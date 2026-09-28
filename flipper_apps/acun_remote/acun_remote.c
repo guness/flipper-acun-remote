@@ -154,9 +154,11 @@ static AcunApp* acun_alloc(void) {
         app->view_dispatcher, acun_tick_event_callback, furi_ms_to_ticks(ACUN_TICK_MS));
 
     app->submenu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, AcunViewSubmenu, submenu_get_view(app->submenu));
+    view_dispatcher_add_view(
+        app->view_dispatcher, AcunViewSubmenu, submenu_get_view(app->submenu));
     app->dialog = dialog_ex_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, AcunViewDialog, dialog_ex_get_view(app->dialog));
+    view_dispatcher_add_view(
+        app->view_dispatcher, AcunViewDialog, dialog_ex_get_view(app->dialog));
     app->text_input = text_input_alloc();
     view_dispatcher_add_view(
         app->view_dispatcher, AcunViewTextInput, text_input_get_view(app->text_input));

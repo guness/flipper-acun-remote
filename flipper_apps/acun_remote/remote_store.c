@@ -20,8 +20,9 @@ static int read_record(Storage* storage, const char* path, SeqProfile* profile) 
     File* file = storage_file_alloc(storage);
     uint8_t data[SEQ_RECORD_SIZE];
     bool ok = storage_file_open(file, path, FSAM_READ, FSOM_OPEN_EXISTING);
-    if(ok) ok = storage_file_size(file) == sizeof(data) &&
-                storage_file_read(file, data, sizeof(data)) == sizeof(data);
+    if(ok)
+        ok = storage_file_size(file) == sizeof(data) &&
+             storage_file_read(file, data, sizeof(data)) == sizeof(data);
     storage_file_close(file);
     storage_file_free(file);
     return ok && seq_unpack(data, profile) ? 1 : -1;
@@ -60,8 +61,10 @@ static void load_entry(Storage* storage, RemoteStore* store, const char* name, u
     /* Never fall back silently from a damaged copy; keep a readable profile only
      * so the entry can still be matched and labelled. */
     entry->damaged = sa < 0 || sb < 0;
-    if(sa == 1 && (sb != 1 || a.generation >= b.generation)) entry->profile = a;
-    else if(sb == 1) entry->profile = b;
+    if(sa == 1 && (sb != 1 || a.generation >= b.generation))
+        entry->profile = a;
+    else if(sb == 1)
+        entry->profile = b;
 }
 
 static int compare_entries(const RemoteEntry* x, const RemoteEntry* y) {
@@ -135,11 +138,15 @@ uint8_t remote_store_free_button(const RemoteStore* store, const char* name) {
 }
 
 size_t remote_store_names(
-    const RemoteStore* store, const SeqProfile* learned, const char* names[], size_t max) {
+    const RemoteStore* store,
+    const SeqProfile* learned,
+    const char* names[],
+    size_t max) {
     size_t n = 0;
     for(size_t i = 0; i < store->count && n < max; ++i) {
         const RemoteEntry* entry = &store->entries[i];
-        if(learned && (entry->damaged || !seq_remote_candidate(&entry->profile, learned))) continue;
+        if(learned && (entry->damaged || !seq_remote_candidate(&entry->profile, learned)))
+            continue;
         if(n && strcasecmp(names[n - 1], entry->name) == 0) continue;
         names[n++] = store->entries[i].name;
     }
@@ -147,7 +154,8 @@ size_t remote_store_names(
 }
 
 void remote_store_label(const RemoteEntry* entry, char* out, size_t size) {
-    snprintf(out, size, "%s B%u%s", entry->name, entry->button, entry->damaged ? " (damaged)" : "");
+    snprintf(
+        out, size, "%s B%u%s", entry->name, entry->button, entry->damaged ? " (damaged)" : "");
 }
 
 bool remote_store_write(Storage* storage, const char* name, uint8_t button, SeqProfile* profile) {

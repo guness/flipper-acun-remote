@@ -19,7 +19,11 @@ static inline void acun_tx_sequence_start(AcunTxSequence* tx) {
 }
 
 static inline bool acun_tx_sequence_next(
-    AcunTxSequence* tx, const SeqFrame* frame, bool held, bool* level, uint32_t* duration) {
+    AcunTxSequence* tx,
+    const SeqFrame* frame,
+    bool held,
+    bool* level,
+    uint32_t* duration) {
     if(!tx->remaining) return false;
     if(tx->initial_gap) {
         tx->initial_gap = false;

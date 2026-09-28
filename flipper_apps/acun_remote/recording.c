@@ -10,7 +10,8 @@ void acun_recording_init(AcunRecording* r) {
 
 static bool number(const char** text, long* out, int base) {
     const char* start = *text;
-    while(isspace((unsigned char)*start)) ++start;
+    while(isspace((unsigned char)*start))
+        ++start;
     errno = 0;
     char* end;
     long value = strtol(start, &end, base);
@@ -22,7 +23,8 @@ static bool number(const char** text, long* out, int base) {
 
 static bool scalar(const char* text, long* out) {
     if(!number(&text, out, 10)) return false;
-    while(isspace((unsigned char)*text)) ++text;
+    while(isspace((unsigned char)*text))
+        ++text;
     return !*text;
 }
 
@@ -86,7 +88,8 @@ static bool binraw(AcunRecording* r, const char* text) {
             }
         }
     }
-    while(isspace((unsigned char)*text)) ++text;
+    while(isspace((unsigned char)*text))
+        ++text;
     if(*text || !leading_gap) return false;
     if(last && seq_timing_decode(&decoder, true, run, &frame)) ++hits;
     /* A BinRAW block starts with its inter-frame low; close the last symbol
@@ -110,7 +113,8 @@ bool acun_recording_line(AcunRecording* r, const char* line) {
     bool ok = true;
     if(KEY("Filetype")) {
         ok = !r->data_seen && !r->filetype &&
-             (!strcmp(value, "Flipper SubGhz Key File") || !strcmp(value, "Flipper SubGhz RAW File"));
+             (!strcmp(value, "Flipper SubGhz Key File") ||
+              !strcmp(value, "Flipper SubGhz RAW File"));
         r->filetype = ok;
     } else if(KEY("Version")) {
         ok = !r->data_seen && !r->version && scalar(value, &n) && n == 1;
@@ -123,9 +127,12 @@ bool acun_recording_line(AcunRecording* r, const char* line) {
         r->preset = ok;
     } else if(KEY("Protocol")) {
         ok = !r->data_seen && !r->protocol;
-        if(!strcmp(value, "BinRAW")) r->protocol = 1;
-        else if(!strcmp(value, "RAW")) r->protocol = 2;
-        else ok = false;
+        if(!strcmp(value, "BinRAW"))
+            r->protocol = 1;
+        else if(!strcmp(value, "RAW"))
+            r->protocol = 2;
+        else
+            ok = false;
     } else if(KEY("TE")) {
         ok = !r->data_seen && scalar(value, &n) && n >= 250 && n <= 550;
         if(ok) r->te = n;
@@ -135,12 +142,14 @@ bool acun_recording_line(AcunRecording* r, const char* line) {
     } else if(KEY("Data_RAW") || KEY("RAW_Data")) {
         ok = r->filetype && r->version && r->frequency && r->preset;
         r->data_seen = true;
-        if(ok && KEY("Data_RAW")) ok = r->protocol == 1 && binraw(r, value);
+        if(ok && KEY("Data_RAW"))
+            ok = r->protocol == 1 && binraw(r, value);
         else if(ok) {
             ok = r->protocol == 2;
             unsigned count = 0;
             while(ok) {
-                while(isspace((unsigned char)*value)) ++value;
+                while(isspace((unsigned char)*value))
+                    ++value;
                 if(!*value) break;
                 ok = number(&value, &n, 10) && n != 0 && n >= -10000000 && n <= 10000000;
                 if(ok) {

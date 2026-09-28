@@ -6,7 +6,11 @@ void acun_scene_about_on_enter(void* context) {
     widget_add_string_element(
         app->widget, 64, 2, AlignCenter, AlignTop, FontPrimary, "Acun Remote " ACUN_VERSION);
     widget_add_text_scroll_element(
-        app->widget, 0, 15, 128, 49,
+        app->widget,
+        0,
+        15,
+        128,
+        49,
         "433.92 MHz / AM270\n"
         "Internal CC1101 radio\n\n"
         "Read learns one button\n"

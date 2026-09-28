@@ -1,12 +1,11 @@
 #include "../acun_remote_i.h"
 
-#define READ_LISTEN_SIGNAL_BAR_Y 48
+#define READ_LISTEN_SIGNAL_BAR_Y        48
 #define READ_LISTEN_SIGNAL_REDRAW_TICKS 10 /* ~100ms at the 10ms dispatcher tick */
 
 static void read_listen_draw(AcunApp* app) {
     widget_reset(app->widget);
-    widget_add_string_element(
-        app->widget, 64, 1, AlignCenter, AlignTop, FontPrimary, "Listening");
+    widget_add_string_element(app->widget, 64, 1, AlignCenter, AlignTop, FontPrimary, "Listening");
     widget_add_string_element(
         app->widget, 64, 15, AlignCenter, AlignTop, FontSecondary, "433.92 MHz");
     widget_add_string_element(

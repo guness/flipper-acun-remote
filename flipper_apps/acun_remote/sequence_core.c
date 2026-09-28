@@ -14,8 +14,7 @@ bool seq_remote_candidate(const SeqProfile* saved, const SeqProfile* learned) {
     int64_t delta = (int64_t)b - a;
     /* Observed sibling buttons advance the fixed code and step together.
      * Do not use user-assigned button numbers or noisy timing as identity. */
-    return delta > -8 && delta < 8 &&
-           (uint16_t)(learned->step - saved->step) == (uint16_t)delta;
+    return delta > -8 && delta < 8 && (uint16_t)(learned->step - saved->step) == (uint16_t)delta;
 }
 
 bool seq_same_button(const SeqFrame* a, const SeqFrame* b) {
@@ -206,8 +205,7 @@ bool seq_timing_decode(SeqTimingDecoder* d, bool level, uint32_t duration, SeqFr
         return false;
     }
     if(duration >= SEQ_GAP_MIN_US) {
-        bool valid = d->synchronized && d->pending_low && d->count >= 47 &&
-                     duration <= 60000;
+        bool valid = d->synchronized && d->pending_low && d->count >= 47 && duration <= 60000;
         if(valid) {
             /* Exclude the last pair: its low includes the inter-frame silence.
              * Summing both halves avoids RX duty-cycle distortion biasing TE. */
@@ -247,8 +245,8 @@ bool seq_timing_decode(SeqTimingDecoder* d, bool level, uint32_t duration, SeqFr
 bool seq_pulse(const SeqFrame* frame, size_t index, bool* level, uint32_t* duration) {
     size_t count = 47u + frame->suffix_count;
     if(frame->suffix_count > 8 || index >= 2u * count) return false;
-    uint64_t bits = ((((uint64_t)frame->prefix << 16) | frame->word) <<
-                     frame->suffix_count) | frame->suffix;
+    uint64_t bits = ((((uint64_t)frame->prefix << 16) | frame->word) << frame->suffix_count) |
+                    frame->suffix;
     bool bit = (bits >> (count - 1u - index / 2u)) & 1;
     *level = !(index & 1);
     *duration = frame->te * (*level ? (bit ? 3u : 1u) : (bit ? 1u : 3u));
@@ -260,7 +258,8 @@ bool seq_pulse(const SeqFrame* frame, size_t index, bool* level, uint32_t* durat
 }
 
 static void put32(uint8_t* b, uint32_t v) {
-    for(size_t i = 0; i < 4; ++i) b[i] = v >> (8u * i);
+    for(size_t i = 0; i < 4; ++i)
+        b[i] = v >> (8u * i);
 }
 
 static uint32_t get32(const uint8_t* b) {
@@ -297,11 +296,11 @@ void seq_pack(const SeqProfile* p, uint8_t b[SEQ_RECORD_SIZE]) {
 
 bool seq_unpack(const uint8_t b[SEQ_RECORD_SIZE], SeqProfile* p) {
     if(memcmp(b, "SEQREM01", 8) || get32(b + 60) != checksum(b, 60) ||
-       get32(b + 12) != SEQ_FREQUENCY || get32(b + 16) > 0x7FFFFFFF ||
-       get32(b + 20) > 0xFFFF || !get32(b + 24) || get32(b + 24) > 0xFFFF ||
-       get32(b + 28) > 0xFFFF || get32(b + 36) < 250 || get32(b + 36) > 550 ||
-       get32(b + 40) < SEQ_GAP_MIN_US || get32(b + 40) > 60000 || get32(b + 48) > 8 ||
-       get32(b + 44) >= (1u << get32(b + 48))) return false;
+       get32(b + 12) != SEQ_FREQUENCY || get32(b + 16) > 0x7FFFFFFF || get32(b + 20) > 0xFFFF ||
+       !get32(b + 24) || get32(b + 24) > 0xFFFF || get32(b + 28) > 0xFFFF || get32(b + 36) < 250 ||
+       get32(b + 36) > 550 || get32(b + 40) < SEQ_GAP_MIN_US || get32(b + 40) > 60000 ||
+       get32(b + 48) > 8 || get32(b + 44) >= (1u << get32(b + 48)))
+        return false;
     memset(p, 0, sizeof(*p));
     p->generation = get32(b + 8);
     p->frame.prefix = get32(b + 16);

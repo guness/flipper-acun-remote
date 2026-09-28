@@ -16,7 +16,8 @@ void acun_scene_entry_menu_on_enter(void* context) {
     if(!entry->damaged) {
         submenu_add_item(app->submenu, "Send", EntrySend, acun_submenu_callback, app);
         submenu_add_item(app->submenu, "Info", EntryInfo, acun_submenu_callback, app);
-        submenu_add_item(app->submenu, "Sync from file", EntryFileSync, acun_submenu_callback, app);
+        submenu_add_item(
+            app->submenu, "Sync from file", EntryFileSync, acun_submenu_callback, app);
         submenu_add_item(app->submenu, "Rename", EntryRename, acun_submenu_callback, app);
     }
     submenu_add_item(app->submenu, "Delete", EntryDelete, acun_submenu_callback, app);

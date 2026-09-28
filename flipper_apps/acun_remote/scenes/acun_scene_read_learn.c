@@ -1,13 +1,14 @@
 #include "../acun_remote_i.h"
 
-#define READ_LEARN_SIGNAL_BAR_Y 49
+#define READ_LEARN_SIGNAL_BAR_Y        49
 #define READ_LEARN_SIGNAL_REDRAW_TICKS 10 /* ~100ms at the 10ms dispatcher tick */
 
 static void read_learn_draw(AcunApp* app) {
     char line[32];
     snprintf(line, sizeof(line), "Press %u of %u", app->captured_count + 1u, SEQ_LEARN_COUNT);
     widget_reset(app->widget);
-    widget_add_string_element(app->widget, 64, 1, AlignCenter, AlignTop, FontPrimary, "New remote");
+    widget_add_string_element(
+        app->widget, 64, 1, AlignCenter, AlignTop, FontPrimary, "New remote");
     widget_add_string_element(app->widget, 64, 13, AlignCenter, AlignTop, FontPrimary, line);
     widget_add_string_multiline_element(
         app->widget,

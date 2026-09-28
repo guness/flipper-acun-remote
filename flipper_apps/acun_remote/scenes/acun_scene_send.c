@@ -17,7 +17,8 @@ static void acun_send_draw(AcunApp* app, bool sending) {
         profile->accumulator,
         profile->frame.word);
     dialog_ex_set_text(app->dialog, app->text2, 64, 31, AlignCenter, AlignCenter);
-    dialog_ex_set_center_button_text(app->dialog, sending ? (app->send_held ? "Sending" : "Finishing") : "Hold to send");
+    dialog_ex_set_center_button_text(
+        app->dialog, sending ? (app->send_held ? "Sending" : "Finishing") : "Hold to send");
 }
 
 static void acun_send_callback(DialogExResult result, void* context) {
@@ -37,8 +38,7 @@ void acun_scene_send_on_enter(void* context) {
     dialog_ex_set_context(app->dialog, app);
     dialog_ex_set_result_callback(app->dialog, acun_send_callback);
     dialog_ex_enable_extended_events(app->dialog);
-    dialog_ex_set_header(
-        app->dialog, acun_selected_label(app), 64, 3, AlignCenter, AlignTop);
+    dialog_ex_set_header(app->dialog, acun_selected_label(app), 64, 3, AlignCenter, AlignTop);
     acun_send_draw(app, false);
     view_dispatcher_switch_to_view(app->view_dispatcher, AcunViewDialog);
 }
@@ -98,7 +98,8 @@ bool acun_scene_send_on_event(void* context, SceneManagerEvent event) {
     case AcunEventTxTimeout:
         app->send_failed = true;
         acun_send_stop(app);
-        acun_popup_show(app, "TX stopped", "Index advanced.\nCheck the receiver.", AcunAfterEntryMenu);
+        acun_popup_show(
+            app, "TX stopped", "Index advanced.\nCheck the receiver.", AcunAfterEntryMenu);
         return true;
     case AcunEventPopupDone:
         acun_popup_done(app);

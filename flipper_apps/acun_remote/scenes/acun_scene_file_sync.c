@@ -2,7 +2,7 @@
 #include "../recording.h"
 
 /* Bound memory and work for files selected from the SD card. */
-#define FILE_SYNC_MAX_BYTES (1024u * 1024u)
+#define FILE_SYNC_MAX_BYTES  (1024u * 1024u)
 #define FILE_SYNC_LINE_BYTES 4096u
 
 static bool file_sync_read(Storage* storage, const char* path, SeqFrame* frame) {
@@ -74,21 +74,34 @@ static void file_sync_preview(AcunApp* app) {
     app->file_browser_running = false;
     bool valid = file_sync_read(app->storage, furi_string_get_cstr(app->file_path), &app->heard);
     if(!valid) {
-        acun_popup_show(app, "Cannot use file", "Need one RAW/BinRAW press\nat 433.92 MHz / AM270.", AcunAfterEntryMenu);
+        acun_popup_show(
+            app,
+            "Cannot use file",
+            "Need one RAW/BinRAW press\nat 433.92 MHz / AM270.",
+            AcunAfterEntryMenu);
         return;
     }
     app->pending = app->store.entries[app->selected].profile;
     if(!seq_sync(&app->pending, &app->heard, &app->sync_delta)) {
-        acun_popup_show(app, "Different button", "File does not match\nthis saved button.", AcunAfterEntryMenu);
+        acun_popup_show(
+            app, "Different button", "File does not match\nthis saved button.", AcunAfterEntryMenu);
         return;
     }
     app->file_sync_ready = true;
     if(app->sync_delta < 0)
-        snprintf(app->text2, sizeof(app->text2), "%s\nFile %ld presses behind.\nSync may be rejected.",
-                 acun_selected_label(app), (long)-app->sync_delta);
+        snprintf(
+            app->text2,
+            sizeof(app->text2),
+            "%s\nFile %ld presses behind.\nSync may be rejected.",
+            acun_selected_label(app),
+            (long)-app->sync_delta);
     else
-        snprintf(app->text2, sizeof(app->text2), "%s\nFile %ld presses ahead.\nFile may be outdated.",
-                 acun_selected_label(app), (long)app->sync_delta);
+        snprintf(
+            app->text2,
+            sizeof(app->text2),
+            "%s\nFile %ld presses ahead.\nFile may be outdated.",
+            acun_selected_label(app),
+            (long)app->sync_delta);
     dialog_ex_reset(app->dialog);
     dialog_ex_set_header(app->dialog, "Sync from file", 64, 3, AlignCenter, AlignTop);
     dialog_ex_set_text(app->dialog, app->text2, 64, 29, AlignCenter, AlignCenter);

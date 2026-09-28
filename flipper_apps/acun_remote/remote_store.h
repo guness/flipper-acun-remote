@@ -4,8 +4,8 @@
 #include "remote_name.h"
 
 #define REMOTE_BUTTON_MAX 8 /* single digit: parse_record_name relies on it */
-#define REMOTE_STORE_MAX 32
-#define REMOTE_LABEL_MAX 32
+#define REMOTE_STORE_MAX  32
+#define REMOTE_LABEL_MAX  32
 
 typedef struct {
     char name[REMOTE_NAME_MAX + 1];
@@ -27,7 +27,10 @@ int remote_store_find_named(const RemoteStore* store, const char* name, uint8_t 
 uint8_t remote_store_free_button(const RemoteStore* store, const char* name);
 /* NULL learned lists all names (rename); otherwise suggests compatible groups. */
 size_t remote_store_names(
-    const RemoteStore* store, const SeqProfile* learned, const char* names[], size_t max);
+    const RemoteStore* store,
+    const SeqProfile* learned,
+    const char* names[],
+    size_t max);
 void remote_store_label(const RemoteEntry* entry, char* out, size_t size);
 bool remote_store_write(Storage* storage, const char* name, uint8_t button, SeqProfile* profile);
 bool remote_store_create(Storage* storage, const char* name, uint8_t button, SeqProfile* profile);

@@ -22,9 +22,9 @@
 #include "radio.h"
 #include "scenes/acun_scene.h"
 
-#define ACUN_VERSION "0.3"
+#define ACUN_VERSION  "0.3"
 #define ACUN_POPUP_MS 1500
-#define ACUN_TICK_MS 10
+#define ACUN_TICK_MS  10
 
 typedef enum {
     AcunViewSubmenu,

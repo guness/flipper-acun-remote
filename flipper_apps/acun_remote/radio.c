@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PULSE_QUEUE_DEPTH 512
-#define TICK_BUDGET 512
+#define PULSE_QUEUE_DEPTH          512
+#define TICK_BUDGET                512
 /* A held button repeats the same frame; this many consecutive identical
  * decodes confirm a press. Two was not enough: a mid-transmission RF fade
  * can leave a decoded frame with its trailing bits reading as a stable run
@@ -22,7 +22,7 @@
  * merges it into the pulse it interrupted instead of splitting that pulse in
  * two, before we ever see it. Same default the firmware's own protocol
  * decoders run behind. */
-#define RADIO_GLITCH_FILTER_US 30
+#define RADIO_GLITCH_FILTER_US     30
 
 typedef struct {
     bool level;
@@ -136,8 +136,8 @@ bool radio_tx_start(Radio* radio, const SeqProfile* profile) {
     radio_stop(radio);
     acun_tx_encoder_start(radio->encoder, &profile->frame);
     radio_prepare(radio);
-    radio->tx_on = subghz_devices_start_async_tx(
-        radio->device, subghz_transmitter_yield, radio->transmitter);
+    radio->tx_on =
+        subghz_devices_start_async_tx(radio->device, subghz_transmitter_yield, radio->transmitter);
     if(!radio->tx_on) radio_stop(radio);
     return radio->tx_on;
 }
