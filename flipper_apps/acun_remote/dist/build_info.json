@@ -16,7 +16,7 @@
       "scripts.dir": "scripts"
     }
   },
-  "fap_sha256": "b04bdb555155cd1d8f4848987092d7dfd4f18475f9e2fe64794ad49972eebc7a",
+  "fap_sha256": "37c9d0b4546cbdfb4c90ca033603ac4cc0bb7ad4fdba1605110fd1ff79b8f623",
   "fap_bytes": 45472,
   "hardware_tested": false
 }

@@ -2,7 +2,8 @@
 
 Flipper application source, build tooling and tests for Acun Remote.
 
-See [application documentation](flipper_apps/acun_remote/README.md) for installation, usage and building.
+See the [user guide](flipper_apps/acun_remote/README.md) for installation and usage, and the
+[technical notes](docs/acun_remote.md) for storage, framing, building and testing.
 
 Tests are self-contained: five recorded presses per remote and button live under `tests/acun_remote/data`.
 

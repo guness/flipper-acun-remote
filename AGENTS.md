@@ -24,7 +24,11 @@ holds a host test suite for the C core and a build script.
   - `acun_remote.c`, `acun_remote_i.h` — app struct, view dispatcher, scene
     manager, shared view callbacks, result-popup helper.
   - `scenes/` — one file per screen, X-macro registered in `acun_scene_config.h`.
-  - `application.fam` — FAP manifest.
+  - `application.fam` — FAP manifest; `fap_version` must match the top
+    `changelog.md` entry.
+  - `README.md`, `changelog.md`, `screenshots/` — shown in the Flipper Apps
+    Catalog. README uses only H1/H2, bold/italic, lists and links. Technical
+    detail goes in `docs/acun_remote.md`.
   - `dist/acun_remote.fap`, `dist/build_info.json` — the shipped build and
     its SDK/FAP hashes. `dist/debug/` and `.vscode/` are ignored.
 - `scripts/build_acun_remote.py` — builds against an SDK zip and toolchain
@@ -67,7 +71,7 @@ outside this repo.
 
 ## Status
 
-Version 0.2: main menu Read / Saved / About, named remotes with numbered
+Version 0.3: main menu Read / Saved / About, Sync from file, hold-to-send, named remotes with numbered
 buttons in one sorted list, single-press sync when a heard button is already
 saved, Send / Info / Rename / Delete per entry. Built on `ViewDispatcher` +
 `SceneManager` with stock views. Hardware behaviour is still unverified.
