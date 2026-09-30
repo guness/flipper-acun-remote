@@ -2,6 +2,7 @@
 #include "tx_encoder.h"
 #include <furi.h>
 #include <furi_hal.h>
+#include <furi_hal_region.h>
 #include <subghz/devices/devices.h>
 #include <subghz/transmitter.h>
 #include <subghz/devices/cc1101_int/cc1101_int_interconnect.h>
@@ -134,6 +135,10 @@ void radio_rx_start(Radio* radio) {
 
 bool radio_tx_start(Radio* radio, const SeqProfile* profile) {
     radio_stop(radio);
+    /* Refuse TX explicitly before preparing the radio or starting the encoder. */
+    if(!furi_hal_region_is_frequency_allowed(SEQ_FREQUENCY) ||
+       !furi_hal_subghz_is_frequency_valid(SEQ_FREQUENCY))
+        return false;
     acun_tx_encoder_start(radio->encoder, &profile->frame);
     radio_prepare(radio);
     radio->tx_on =

@@ -4,7 +4,7 @@ void acun_scene_about_on_enter(void* context) {
     AcunApp* app = context;
     widget_reset(app->widget);
     widget_add_string_element(
-        app->widget, 64, 2, AlignCenter, AlignTop, FontPrimary, "Acun Remote " ACUN_VERSION);
+        app->widget, 64, 2, AlignCenter, AlignTop, FontPrimary, "Acun Remote " FAP_VERSION);
     widget_add_text_scroll_element(
         app->widget,
         0,

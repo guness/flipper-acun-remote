@@ -7,9 +7,11 @@ the SD card, and sends the next value on demand. Internal radio at
 
 ## Install
 
-Copy `flipper_apps/acun_remote/dist/acun_remote.fap` to the Flipper SD card under `apps/Sub-GHz/`. The
-supplied build targets the local Unleashed SDK, hardware f7, API **88.11**.
-Firmware with an incompatible API needs a rebuild against its own SDK.
+Download the `.fap` matching your firmware from GitHub Releases and copy it
+to `apps/Sub-GHz/acun_remote.fap` on the SD card. See the
+[manual and one-command installation instructions](../README.md#install-manually).
+Builds and SDK metadata are release assets, not source files. Firmware with an
+incompatible API needs a rebuild against its own SDK.
 
 ## Use
 
@@ -89,15 +91,20 @@ are versioned 64-byte little-endian with CRC32. The two files alternate: before
 a send or sync the next state is written, synced and read back, and a failure
 blocks the action and marks the entry damaged. On load the copy with the higher
 generation wins. Files from the earlier fixed-slot version are ignored. Up to
-32 entries are listed. Keep the SD card inserted while using the app. The
-frequency stays subject to the firmware's normal transmission-region checks.
+32 entries are listed. Keep the SD card inserted while using the app.
+Before preparing TX, `radio_tx_start()` explicitly checks
+`furi_hal_region_is_frequency_allowed(SEQ_FREQUENCY)` and
+`furi_hal_subghz_is_frequency_valid(SEQ_FREQUENCY)`, refusing TX if either
+returns false. The already-reserved index stays consumed on refusal. Region
+enforcement depends on the installed firmware: the local Unleashed firmware
+always returns true from its region-permission function.
 
 Transmission uses Flipper's native `SubGhzTransmitter` framework with an
 app-local Acun protocol registry. The Acun encoder supplies the learned pulse,
 gap and tail through the native transmitter's yield callback. Its typed start
 method accepts the already-reserved frame; the encoder never advances counters.
-These framework APIs are shared with official firmware, though this shipped
-build is checked against the local Unleashed SDK.
+These framework APIs are shared with official firmware, and the release
+workflow builds against both official and Unleashed release SDKs.
 
 ## Framing
 

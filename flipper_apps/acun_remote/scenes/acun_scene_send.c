@@ -68,7 +68,7 @@ bool acun_scene_send_on_event(void* context, SceneManagerEvent event) {
             return true;
         }
         entry->profile = app->pending;
-        /* The SDK checks region restrictions in the transmit-start call. */
+        /* The radio layer checks region permission before attempting TX. */
         if(!radio_tx_start(app->radio, &app->pending)) {
             app->send_failed = true;
             acun_popup_show(

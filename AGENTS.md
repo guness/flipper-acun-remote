@@ -25,12 +25,18 @@ holds a host test suite for the C core and a build script.
     manager, shared view callbacks, result-popup helper.
   - `scenes/` — one file per screen, X-macro registered in `acun_scene_config.h`.
   - `application.fam` — FAP manifest; `fap_version` must match the top
-    `changelog.md` entry.
-  - `README.md`, `changelog.md`, `screenshots/` — shown in the Flipper Apps
-    Catalog. README uses only H1/H2, bold/italic, lists and links. Technical
-    detail goes in `docs/acun_remote.md`.
-  - `dist/acun_remote.fap`, `dist/build_info.json` — the shipped build and
-    its SDK/FAP hashes. `dist/debug/` and `.vscode/` are ignored.
+    `CHANGELOG.md` entry. About uses the SDK-provided `FAP_VERSION` from this
+    manifest; do not add a separate hardcoded version string.
+  - `dist/` — ignored local build output. Compiled `.fap` files and build
+    metadata are distributed as GitHub Release assets, never committed.
+- `docs/user-guide.md`, `docs/screenshots/` — user documentation and screenshots.
+  Technical detail goes in `docs/acun_remote.md`; version history is in
+  `CHANGELOG.md`. There are no catalog-specific Markdown restrictions.
+- `.github/workflows/release.yml` — on every pushed tag, test, build official and
+  Unleashed variants, then publish a GitHub Release with binaries and metadata.
+- `scripts/install_acun_remote.py` — bootstrap a repository-local uFBT setup,
+  build for selected firmware, and install over USB (or `--build-only`).
+- `tests/scripts/` — host tests for installer behaviour; no network or hardware.
 - `scripts/build_acun_remote.py` — builds against an SDK zip and toolchain
   in a temp dir without modifying the firmware checkout.
 - `tests/acun_remote/run.py` — compiles `sequence_core.c` with `cc` and
@@ -43,13 +49,15 @@ holds a host test suite for the C core and a build script.
 
 ```sh
 python3 tests/acun_remote/run.py
+python3 -m unittest discover -s tests/scripts -v
+python3 scripts/install_acun_remote.py --firmware official --build-only
 python3 scripts/build_acun_remote.py \
   --sdk ../unleashed-firmware/dist/f7-C/flipper-z-f7-sdk-local.zip \
   --toolchain ../unleashed-firmware/toolchain/current
 ```
 
-The build needs the sibling `unleashed-firmware` checkout; the tests need nothing
-outside this repo.
+The local SDK build helper needs the sibling `unleashed-firmware` checkout.
+The installer downloads its dependencies; the tests need nothing outside this repo.
 
 ## Rules
 
@@ -64,14 +72,15 @@ outside this repo.
 - Never start a transmission before the next index has been written to the SD
   card, synced and read back. A cancelled or failed transmission consumes an
   index; never roll one back.
-- Rebuild `dist/` when C sources or `application.fam` change, and re-run the
-  tests. `hardware_tested` in `build_info.json` stays `false` until someone
+- Rebuild locally when C sources or `application.fam` change, and re-run the
+  tests. Never commit `dist/`, `.install/`, or release assets.
+  `hardware_tested` in `build_info.json` stays `false` until someone
   confirms reception and transmission on a device; do not claim otherwise.
 - Radio behaviour on hardware has not been validated. Say so when relevant.
 
 ## Status
 
-Version 0.3: main menu Read / Saved / About, Sync from file, hold-to-send, named remotes with numbered
+Version 1.0: main menu Read / Saved / About, Sync from file, hold-to-send, named remotes with numbered
 buttons in one sorted list, single-press sync when a heard button is already
 saved, Send / Info / Rename / Delete per entry. Built on `ViewDispatcher` +
 `SceneManager` with stock views. Hardware behaviour is still unverified.

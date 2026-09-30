@@ -7,6 +7,13 @@ each time you press OK. It uses the internal radio at 433.92 MHz.
 Each saved button keeps its own counter on the SD card. The counter is saved
 before every transmission, so the remote and the Flipper stay in step.
 
+## Install
+
+Follow the [manual or one-command USB installation instructions](../README.md#install-manually),
+then open **Apps → Sub-GHz → Acun Remote**.
+
+![Main menu](screenshots/1.main.png)
+
 ## Read
 
 Open **Read** and hold a button on your remote until the Flipper beeps.
@@ -31,4 +38,5 @@ All learned buttons in one list, for example "Garage B1", "Garage B2". Open one 
 - Pressing the original remote moves it ahead of the Flipper. If the gate stops
   responding, use **Read** on the original remote and **Sync**.
 - Transmission follows your firmware's regional frequency rules.
-- Tested on a limited number of remotes. Behaviour with other receivers may differ.
+- Host tests cover recorded samples from a limited number of remotes. Radio
+  behaviour on hardware remains unverified.
