@@ -110,6 +110,10 @@ GitHub Actions must be enabled for the repository. The workflow must be included
 in the tagged commit. Avoid pushing more than three tags at once, because GitHub
 does not emit tag-push workflow events for those batches.
 
+If a tag push does not start a run, open **Actions → Release → Run workflow**
+on `main` and enter the existing tag (for example, `v1.0`). This builds the
+tagged source and publishes its release without moving the tag.
+
 ## Test
 
 ```sh
