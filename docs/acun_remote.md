@@ -104,7 +104,8 @@ app-local Acun protocol registry. The Acun encoder supplies the learned pulse,
 gap and tail through the native transmitter's yield callback. Its typed start
 method accepts the already-reserved frame; the encoder never advances counters.
 These framework APIs are shared with official firmware, and the release
-workflow builds against both official and Unleashed release SDKs.
+workflow builds against official, Unleashed, and Momentum release SDKs, plus
+RogueMaster's tagged firmware source using its `fbt` build system.
 
 ## Framing
 

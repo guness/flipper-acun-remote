@@ -1,6 +1,7 @@
 """Exercise installer orchestration without network access or a USB device."""
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -18,11 +19,13 @@ class InstallTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.app = self.root / 'flipper_apps/acun_remote'
         self.app.mkdir(parents=True)
+        (self.app / 'application.fam').write_text('test manifest')
         self.calls = []
         self.fail_on = None
+        self.source = self.root / '.install/roguemaster/RM-test'
         self.status = {'sdk': {'version': 'test-release'}}
         self.patch_root = patch.object(installer, 'ROOT', self.root)
         self.patch_root.start()
@@ -37,6 +40,23 @@ class InstallTests(unittest.TestCase):
     def run_command(self, command, **kwargs):
         self.calls.append((command, kwargs))
         self.assertTrue(kwargs['check'])
+        if command[0] == 'git':
+            if command[1] == 'config':
+                output = 'submodule.core.path lib/core\nsubmodule.proto.path assets/protobuf\nsubmodule.app.path applications/external/unused\n'
+            elif command[1] == 'rev-parse':
+                output = 'test-commit\n'
+            else:
+                output = ''
+            return subprocess.CompletedProcess(command, 0, stdout=output)
+        if command[0] == './fbt':
+            arguments = command[1:]
+            if arguments == self.fail_on:
+                raise subprocess.CalledProcessError(1, command)
+            if arguments == ['fap_acun_remote']:
+                binary = self.source / 'build/f7-firmware-C/.extapps/acun_remote.fap'
+                binary.parent.mkdir(parents=True, exist_ok=True)
+                binary.write_bytes(b'test FAP')
+            return subprocess.CompletedProcess(command, 0)
         if command[2] == 'pip':
             return subprocess.CompletedProcess(command, 0)
         self.assertEqual(command[1:3], ['-m', 'ufbt'])
@@ -75,6 +95,56 @@ class InstallTests(unittest.TestCase):
         env = self.calls[-1][1]['env']
         self.assertEqual(env['UFBT_HOME'], str(self.root / '.install/unleashed'))
         self.assertEqual(env['FBT_TOOLCHAIN_PATH'], str(self.root / '.install'))
+
+    def test_momentum_selects_its_own_sdk(self):
+        installer.main(['--firmware', 'momentum', '--build-only'])
+        self.assertIn(installer.INDEXES['momentum'], self.ufbt_commands()[0])
+        self.assertNotIn(['launch'], self.ufbt_commands())
+
+    def test_alternate_app_directory_receives_build_output(self):
+        self.app = self.root / 'tagged-source'
+        self.app.mkdir()
+        (self.app / 'application.fam').write_text('tagged manifest')
+        installer.main(['--firmware', 'official', '--app-dir', str(self.app), '--build-only'])
+        self.assertTrue((self.app / 'dist/build_info.json').exists())
+
+    def prepare_roguemaster(self):
+        (self.source / '.git').mkdir(parents=True)
+        symbols = self.source / 'targets/f7/api_symbols.csv'
+        symbols.parent.mkdir(parents=True)
+        symbols.write_text('Version,+,88.4,,\n')
+
+    def test_roguemaster_source_build_records_revision_and_installs(self):
+        self.prepare_roguemaster()
+        installer.main(['--firmware', 'roguemaster', '--roguemaster-tag', 'RM-test'])
+        metadata = json.loads((self.app / 'dist/build_info.json').read_text())
+        self.assertEqual(metadata['firmware_tag'], 'RM-test')
+        self.assertEqual(metadata['firmware_commit'], 'test-commit')
+        self.assertIs(metadata['hardware_tested'], False)
+        commands = [command for command, _ in self.calls]
+        self.assertIn(['./fbt', 'fap_acun_remote'], commands)
+        self.assertEqual(commands[-1], ['./fbt', 'launch', 'APPSRC=acun_remote'])
+        self.assertFalse(any('applications/external/unused' in command for command in commands))
+        self.create.assert_not_called()
+
+    def test_roguemaster_latest_release_build_only_never_uploads(self):
+        self.prepare_roguemaster()
+        with patch.object(installer, 'urlopen', return_value=io.BytesIO(b'{"tag_name":"RM-test"}')):
+            installer.main(['--firmware', 'roguemaster', '--build-only'])
+        self.assertFalse(any('launch' in command for command, _ in self.calls))
+
+    def test_roguemaster_failed_build_never_uploads_or_publishes_metadata(self):
+        self.prepare_roguemaster()
+        self.fail_on = ['fap_acun_remote']
+        with self.assertRaises(subprocess.CalledProcessError):
+            installer.main(['--firmware', 'roguemaster', '--roguemaster-tag', 'RM-test'])
+        self.assertFalse((self.app / 'dist/build_info.json').exists())
+        self.assertFalse(any('launch' in command for command, _ in self.calls))
+
+    def test_invalid_roguemaster_tag_is_rejected_before_clone(self):
+        with self.assertRaises(ValueError):
+            installer.main(['--firmware', 'roguemaster', '--roguemaster-tag', '../outside'])
+        self.assertFalse(self.calls)
 
     def test_local_sdk_path_with_spaces_is_passed_as_one_argument(self):
         sdk = self.root / 'custom SDK.zip'

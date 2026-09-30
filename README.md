@@ -26,14 +26,20 @@ Acun Remote is distributed through
 [GitHub Releases](https://github.com/guness/flipper-acun-remote/releases), outside
 the official app catalog. No compiled app is stored in this repository.
 
-1. Open a release and download the file matching your installed firmware:
-   `acun_remote-official.fap` for official firmware or
-   `acun_remote-unleashed.fap` for Unleashed.
+1. Open a release and download the file matching your installed firmware from
+   the table below.
 2. Rename it to `acun_remote.fap`.
 3. Connect your Flipper by USB and open qFlipper's file manager. Upload the file
    to **SD Card → apps → Sub-GHz** (create the folder if needed). Alternatively,
    copy it to `apps/Sub-GHz/` using an SD card reader.
 4. On the Flipper, open **Apps → Sub-GHz → Acun Remote**.
+
+| Installed firmware | Release asset |
+|---|---|
+| Official | `acun_remote-official.fap` |
+| Unleashed | `acun_remote-unleashed.fap` |
+| Momentum | `acun_remote-momentum.fap` |
+| RogueMaster | `acun_remote-roguemaster.fap` |
 
 To update, close the app and replace the same `.fap` file. Keep the app's data
 folder to preserve saved remotes. If the Flipper reports an API mismatch,
@@ -42,7 +48,7 @@ firmware, or build with your installed firmware's SDK.
 
 ## One-command USB install
 
-Download and extract this repository's source archive (or clone it). Install
+Download this repository's current **Code → Download ZIP** (or clone it). Install
 Python 3.9 or newer, connect your Flipper over USB with its SD card inserted,
 and close qFlipper and any serial terminal. From the repository root, run:
 
@@ -50,21 +56,30 @@ and close qFlipper and any serial terminal. From the repository root, run:
 python3 scripts/install_acun_remote.py --firmware official
 ```
 
-For Unleashed, use `--firmware unleashed`. On Windows, replace `python3` with
+Choose `--firmware unleashed`, `--firmware momentum`, or `--firmware roguemaster`
+for the corresponding custom firmware. On Windows, replace `python3` with
 `py -3`. On Debian/Ubuntu, install `python3-venv` if Python reports that venv or
 ensurepip is unavailable. Linux users also need permission to access the
 Flipper's USB serial port.
 
-The script installs [uFBT](https://github.com/flipperdevices/flipperzero-ufbt)
-and downloads the selected firmware's latest release SDK/toolchain into the
-ignored `.install/` folder, builds this checkout, then uploads and starts the
-app. It installs the app only; it does not update your firmware. The first run
-needs internet access and can take several minutes.
+For official, Unleashed, and Momentum firmware, the script installs
+[uFBT](https://github.com/flipperdevices/flipperzero-ufbt) and downloads the latest
+release SDK/toolchain. RogueMaster requires **Git** as well: the script fetches
+a sparse checkout of its latest release and builds with its own `fbt` tools.
+All downloaded build files stay in the ignored `.install/` folder. The app is
+then uploaded and started; your firmware is not updated. The first run needs
+internet access and can take several minutes, particularly for RogueMaster.
 
 For older or custom firmware, supply its SDK zip:
 
 ```sh
 python3 scripts/install_acun_remote.py --firmware unleashed --sdk /path/to/matching-sdk.zip
+```
+
+For a specific RogueMaster release, use its exact tag:
+
+```sh
+python3 scripts/install_acun_remote.py --firmware roguemaster --roguemaster-tag RM0819-2255-b3dd8981
 ```
 
 ## Build
@@ -75,8 +90,9 @@ Build without connecting a device:
 python3 scripts/install_acun_remote.py --firmware official --build-only
 ```
 
-Use `--firmware unleashed` for Unleashed, or add `--sdk /path/to/sdk.zip` to
-select an exact SDK. Outputs are `flipper_apps/acun_remote/dist/acun_remote.fap`
+Select any of the four firmware names above. Use `--sdk /path/to/sdk.zip` to
+select an exact SDK, or `--roguemaster-tag` for a RogueMaster source release.
+Outputs are `flipper_apps/acun_remote/dist/acun_remote.fap`
 and `dist/build_info.json`; the entire `dist/` directory is ignored by Git.
 `application.fam` stays in the source because it is the required build manifest.
 
@@ -92,9 +108,9 @@ python3 scripts/build_acun_remote.py \
 ## Publish a release
 
 The [release workflow](.github/workflows/release.yml) runs for every pushed tag.
-It runs the host and installer tests, builds against both official and Unleashed
-release SDKs, and publishes a GitHub Release after both builds succeed. Assets
-include both `.fap` files, SDK/build metadata, and SHA-256 checksums. If a build
+It runs the host and installer tests, builds for official, Unleashed, Momentum,
+and RogueMaster firmware, and publishes a GitHub Release after all four builds
+succeed. Assets include four `.fap` files, SDK/build metadata, and SHA-256 checksums. If a build
 fails, fix the failure and rerun the workflow before a release is published.
 
 Update `fap_version` in `application.fam` and [CHANGELOG.md](CHANGELOG.md), commit
@@ -112,7 +128,10 @@ does not emit tag-push workflow events for those batches.
 
 If a tag push does not start a run, open **Actions → Release → Run workflow**
 on `main` and enter the existing tag (for example, `v1.0`). This builds the
-tagged source and publishes its release without moving the tag.
+tagged app source using the workflow revision's installer and publishes its
+release without moving the tag. This also lets us add firmware builds to an
+existing release. Metadata identifies the SDK or firmware source revision
+used for each binary.
 
 ## Test
 

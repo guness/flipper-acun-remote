@@ -1,4 +1,5 @@
 v1.0:
+Momentum and RogueMaster release builds and USB installer targets
 GitHub Release distribution, manual installation guide and one-command USB installer
 Explicit region permission and frequency validity checks before TX
 About screen version follows the build manifest automatically

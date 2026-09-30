@@ -32,10 +32,13 @@ holds a host test suite for the C core and a build script.
 - `docs/user-guide.md`, `docs/screenshots/` — user documentation and screenshots.
   Technical detail goes in `docs/acun_remote.md`; version history is in
   `CHANGELOG.md`. There are no catalog-specific Markdown restrictions.
-- `.github/workflows/release.yml` — on every pushed tag, test, build official and
-  Unleashed variants, then publish a GitHub Release with binaries and metadata.
-- `scripts/install_acun_remote.py` — bootstrap a repository-local uFBT setup,
-  build for selected firmware, and install over USB (or `--build-only`).
+- `.github/workflows/release.yml` — test, build official, Unleashed, Momentum,
+  and RogueMaster variants, then publish binaries and metadata. Builds use the
+  tagged app source and the workflow revision's installer; manual retries can
+  add firmware targets to an existing tag without moving it.
+- `scripts/install_acun_remote.py` — bootstrap repository-local uFBT or a sparse
+  RogueMaster source checkout, build for selected firmware, and install over USB
+  (or `--build-only`). RogueMaster requires Git and records its release tag/commit.
 - `tests/scripts/` — host tests for installer behaviour; no network or hardware.
 - `scripts/build_acun_remote.py` — builds against an SDK zip and toolchain
   in a temp dir without modifying the firmware checkout.
